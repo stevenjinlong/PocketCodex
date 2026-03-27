@@ -1,0 +1,22 @@
+{
+  "name": "@pocket-codex/db",
+  "version": "0.1.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "types": "./src/index.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@pocket-codex/protocol": "file:../protocol",
+    "drizzle-orm": "^0.41.0",
+    "pg": "^8.13.3"
+  },
+  "devDependencies": {
+    "@types/pg": "^8.11.11",
+    "drizzle-kit": "^0.30.4"
+  }
+}

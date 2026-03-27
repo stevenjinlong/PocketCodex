@@ -1,0 +1,21 @@
+{
+  "name": "@pocket-codex/agent",
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsx src/index.ts up",
+    "start": "tsx src/index.ts up",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@pocket-codex/crypto": "file:../../packages/crypto",
+    "@pocket-codex/protocol": "file:../../packages/protocol",
+    "qrcode-terminal": "^0.12.0",
+    "ws": "^8.18.1"
+  },
+  "devDependencies": {
+    "@types/qrcode-terminal": "^0.12.2",
+    "@types/ws": "^8.5.14"
+  }
+}

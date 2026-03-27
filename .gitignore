@@ -1,0 +1,13 @@
+node_modules
+dist
+.vite
+.DS_Store
+.env
+.env.*
+coverage
+*.log
+.next
+.turbo
+*.tsbuildinfo
+apps/web/dist
+apps/*/dist
