@@ -1,10 +1,42 @@
-# Pocket Codex
+<p align="center">
+  <img src="./docs/assets/pocket-codex-hero.png" alt="Pocket Codex hero" width="960" />
+</p>
 
-> Run Codex from anywhere. Keep the runtime on your machine.
+<p align="center">
+  <a href="https://github.com/stevenjinlong/PocketCodex/stargazers">
+    <img alt="GitHub stars" src="https://img.shields.io/github/stars/stevenjinlong/PocketCodex?style=for-the-badge&logo=github&label=Stars&color=0A66FF" />
+  </a>
+  <a href="https://github.com/stevenjinlong/PocketCodex/forks">
+    <img alt="GitHub forks" src="https://img.shields.io/github/forks/stevenjinlong/PocketCodex?style=for-the-badge&logo=github&label=Forks&color=2563EB" />
+  </a>
+  <a href="https://github.com/stevenjinlong/PocketCodex/issues">
+    <img alt="GitHub issues" src="https://img.shields.io/github/issues/stevenjinlong/PocketCodex?style=for-the-badge&logo=github&label=Issues&color=0F766E" />
+  </a>
+  <a href="https://github.com/stevenjinlong/PocketCodex/commits/main">
+    <img alt="GitHub last commit" src="https://img.shields.io/github/last-commit/stevenjinlong/PocketCodex?style=for-the-badge&logo=github&label=Last%20Commit&color=F59E0B" />
+  </a>
+</p>
 
-Pocket Codex turns a local Codex runtime into a remote-first product experience. Open a browser anywhere, sign in, pair a host, and keep talking to the Codex runtime that still lives next to your real repository, tools, and local environment.
+<p align="center">
+  <img alt="Next.js 15" src="https://img.shields.io/badge/Next.js-15-111827?style=flat-square&logo=nextdotjs&logoColor=white" />
+  <img alt="Postgres control plane" src="https://img.shields.io/badge/Postgres-Control%20Plane-336791?style=flat-square&logo=postgresql&logoColor=white" />
+  <img alt="Encrypted relay" src="https://img.shields.io/badge/Encrypted-Relay-0EA5E9?style=flat-square" />
+  <img alt="Self-hosted" src="https://img.shields.io/badge/Self--Hosted-Ready-2563EB?style=flat-square" />
+</p>
 
-The browser app and gateway handle the control plane. The agent stays on the machine that already has your workspace. Postgres stores users, trusted devices, hosts, pairings, and encrypted session metadata, while the real thread content stays with the runtime.
+<h1 align="center">Pocket Codex</h1>
+
+<p align="center">
+  <strong>Run Codex from anywhere. Keep the runtime on your machine.</strong>
+</p>
+
+<p align="center">
+  Pocket Codex turns a local Codex runtime into a remote-first product experience. Open a browser anywhere, sign in, pair a host, and keep talking to the Codex runtime that still lives next to your real repository, tools, and local environment.
+</p>
+
+<p align="center">
+  The browser app and gateway handle the control plane. The agent stays on the machine that already has your workspace. Postgres stores users, trusted devices, hosts, pairings, and encrypted session metadata, while the real thread content stays with the runtime.
+</p>
 
 ## Why Pocket Codex feels different
 
