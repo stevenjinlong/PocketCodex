@@ -1,12 +1,14 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 import { Icons } from "./pocket-codex-icons";
 import { ActionButton } from "./pocket-codex-ui";
 
 type SidebarThreadGroup = {
   cwd: string;
+  label: string;
+  sublabel?: string | null;
   archived?: boolean;
   threads: Array<{
     id: string;
@@ -63,6 +65,20 @@ export function Sidebar({
   onControls: () => void;
   onLogout: () => void;
 }) {
+  const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    setCollapsedGroups((current) => {
+      const next: Record<string, boolean> = {};
+
+      for (const group of groups) {
+        next[group.cwd] = current[group.cwd] ?? Boolean(group.archived);
+      }
+
+      return next;
+    });
+  }, [groups]);
+
   return (
     <aside className="pc-sidebar">
       <div className="pc-sidebar-brand">
@@ -96,23 +112,53 @@ export function Sidebar({
           {groups.length === 0 ? (
             <div className="pc-thread-empty">No chats yet</div>
           ) : (
-            groups.map((group) => (
-              <div key={group.cwd} className="pc-thread-group">
-                <div className="pc-thread-group-title">{group.archived ? "Archived" : group.cwd}</div>
-                {group.threads.map((thread) => (
+            groups.map((group) => {
+              const collapsed = searchValue ? false : (collapsedGroups[group.cwd] ?? Boolean(group.archived));
+
+              return (
+                <div key={group.cwd} className={`pc-thread-group${collapsed ? " is-collapsed" : ""}`}>
                   <button
-                    key={thread.id}
-                    className={`pc-thread-item${thread.active ? " is-active" : ""}`}
+                    className="pc-thread-group-trigger"
                     type="button"
-                    onClick={() => onSelectThread(thread.id)}
+                    onClick={() =>
+                      setCollapsedGroups((current) => ({
+                        ...current,
+                        [group.cwd]: !(current[group.cwd] ?? Boolean(group.archived)),
+                      }))}
+                    aria-expanded={!collapsed}
                   >
-                    <strong>{thread.label}</strong>
-                    <span>{thread.preview}</span>
-                    {thread.meta ? <small>{thread.meta}</small> : null}
+                    <span className="pc-thread-group-icon">
+                      {group.archived ? <Icons.Archive /> : <Icons.Folder />}
+                    </span>
+                    <span className="pc-thread-group-copy">
+                      <strong>{group.label}</strong>
+                      {group.sublabel ? <small>{group.sublabel}</small> : null}
+                    </span>
+                    <span className="pc-thread-group-count">{group.threads.length}</span>
+                    <span className="pc-thread-group-chevron">
+                      <Icons.ChevronDown />
+                    </span>
                   </button>
-                ))}
-              </div>
-            ))
+
+                  {!collapsed ? (
+                    <div className="pc-thread-group-items">
+                      {group.threads.map((thread) => (
+                        <button
+                          key={thread.id}
+                          className={`pc-thread-item${thread.active ? " is-active" : ""}`}
+                          type="button"
+                          onClick={() => onSelectThread(thread.id)}
+                        >
+                          <strong>{thread.label}</strong>
+                          <span>{thread.preview}</span>
+                          {thread.meta ? <small>{thread.meta}</small> : null}
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              );
+            })
           )}
         </div>
       </div>

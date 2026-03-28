@@ -93,6 +93,30 @@ const NON_RENDERED_RELAY_METHODS = new Set([
   "turn/failed",
 ]);
 
+const AUTH_STAGE_PILLS = [
+  "Encrypted relay",
+  "Local runtime",
+  "Trusted devices",
+];
+
+const AUTH_STAGE_FEATURES = [
+  {
+    id: "pair",
+    title: "Pair Once",
+    detail: "Bind a browser to your local host with a short-lived QR payload and keep the runtime on your machine.",
+  },
+  {
+    id: "relay",
+    title: "Relay Securely",
+    detail: "The gateway handles control-plane data while session keys are negotiated between browser and agent.",
+  },
+  {
+    id: "threads",
+    title: "Keep Threads Local",
+    detail: "Conversation history and workspace context stay with Codex instead of being copied into the product database.",
+  },
+];
+
 type AuthMode = "login" | "register";
 type ConnectionState = "idle" | "connecting" | "authenticating" | "connected" | "reconnecting" | "error";
 type SecureState = "idle" | "handshaking" | "ready" | "error";
@@ -279,6 +303,54 @@ function truncateText(value: string, limit = 90): string {
     return value;
   }
   return `${value.slice(0, limit - 1)}...`;
+}
+
+function describeThreadGroupDirectory(cwd: string, archived?: boolean): {
+  label: string;
+  sublabel: string | null;
+} {
+  if (archived) {
+    return {
+      label: "Archived",
+      sublabel: "Stored conversations",
+    };
+  }
+
+  const trimmed = cwd.trim();
+  if (!trimmed || trimmed === "No directory") {
+    return {
+      label: "No directory",
+      sublabel: "Threads without a working directory",
+    };
+  }
+
+  const normalized = trimmed.replace(/\\/g, "/").replace(/\/+$/, "");
+  if (!normalized) {
+    return {
+      label: trimmed,
+      sublabel: null,
+    };
+  }
+
+  const lastSlash = normalized.lastIndexOf("/");
+  if (lastSlash === -1) {
+    return {
+      label: normalized,
+      sublabel: null,
+    };
+  }
+
+  const label = normalized.slice(lastSlash + 1) || normalized;
+  let sublabel = normalized.slice(0, lastSlash);
+
+  if (!sublabel && normalized.startsWith("/")) {
+    sublabel = "/";
+  }
+
+  return {
+    label,
+    sublabel: sublabel || null,
+  };
 }
 
 function shouldRenderRelayEvent(event: CodexRelayEvent): boolean {
@@ -829,10 +901,15 @@ export function PocketCodexApp() {
       });
     }
 
-    const liveGroups = Array.from(grouped.entries()).map(([cwdPath, groupedThreads]) => ({
-      cwd: cwdPath,
-      threads: groupedThreads,
-    }));
+    const liveGroups = Array.from(grouped.entries()).map(([cwdPath, groupedThreads]) => {
+      const display = describeThreadGroupDirectory(cwdPath);
+      return {
+        cwd: cwdPath,
+        label: display.label,
+        sublabel: display.sublabel,
+        threads: groupedThreads,
+      };
+    });
 
     const archivedMatches = archivedThreads
       .filter((thread) => {
@@ -861,7 +938,16 @@ export function PocketCodexApp() {
       }));
 
     return archivedMatches.length > 0
-      ? [...liveGroups, { cwd: "Archived", archived: true, threads: archivedMatches }]
+      ? [
+        ...liveGroups,
+        {
+          cwd: "Archived",
+          archived: true,
+          label: "Archived",
+          sublabel: "Stored conversations",
+          threads: archivedMatches,
+        },
+      ]
       : liveGroups;
   }, [archivedThreads, selectedThreadId, threadSearchNeedle, threads]);
 
@@ -1956,11 +2042,23 @@ export function PocketCodexApp() {
   );
 
   const statusBadges = [
-    ...(serviceTier === "fast" ? [{ label: "fast", tone: "warning" as const }] : []),
-    ...(collaborationMode === "plan" ? [{ label: "plan", tone: "accent" as const }] : []),
-    { label: hostStatusLabel(selectedHost), tone: selectedHost?.online ? "success" as const : "neutral" as const },
-    { label: secureState, tone: secureState === "ready" ? "accent" as const : "neutral" as const },
-    { label: connectionState, tone: connectionState === "connected" ? "success" as const : "neutral" as const },
+    ...(serviceTier === "fast" ? [{ id: "service-tier", label: "fast", tone: "warning" as const }] : []),
+    ...(collaborationMode === "plan" ? [{ id: "collaboration-mode", label: "plan", tone: "accent" as const }] : []),
+    {
+      id: "host-status",
+      label: hostStatusLabel(selectedHost),
+      tone: selectedHost?.online ? "success" as const : "neutral" as const,
+    },
+    {
+      id: "secure-state",
+      label: secureState,
+      tone: secureState === "ready" ? "accent" as const : "neutral" as const,
+    },
+    {
+      id: "connection-state",
+      label: connectionState,
+      tone: connectionState === "connected" ? "success" as const : "neutral" as const,
+    },
   ];
 
   const setupModal = (
@@ -2292,64 +2390,103 @@ export function PocketCodexApp() {
   if (!token || !user) {
     return (
       <main className="pc-auth-shell">
-        <section className="pc-auth-card">
-          <div className="pc-auth-brand">
-            <img className="pc-brand-image is-large" src="/pocketcodex-mark.svg" alt="Pocket Codex" />
-            <div>
-              <span className="pc-auth-eyebrow">Pocket Codex</span>
-              <strong>Remote workspace for your local runtime</strong>
+        <section className="pc-auth-layout">
+          <section className="pc-auth-stage">
+            <div className="pc-auth-stage-backdrop" aria-hidden="true">
+              <span className="pc-auth-aurora is-primary" />
+              <span className="pc-auth-aurora is-secondary" />
+              <span className="pc-auth-aurora is-tertiary" />
+              <span className="pc-auth-stage-grid" />
+              <span className="pc-auth-stage-orbit is-large" />
+              <span className="pc-auth-stage-orbit is-small" />
             </div>
-          </div>
 
-          <div className="pc-auth-copy">
-            <h1>{authMode === "login" ? "Welcome back" : "Create your account"}</h1>
-            <p>
-              Dark, premium, and minimal on the outside. Your actual Codex runtime stays local on your machine.
-            </p>
-          </div>
+            <div className="pc-auth-stage-copy">
+              <span className="pc-auth-eyebrow">Pocket Codex</span>
+              <h1>Encrypted control plane for your local Codex runtime</h1>
+              <p>
+                Pair the browser with your machine, keep thread content local, and route account and relay metadata through the DB-backed gateway.
+              </p>
+            </div>
 
-          <form className="pc-form-stack" onSubmit={(event) => void handleAuthSubmit(event)}>
-            {authMode === "register" ? (
+            <div className="pc-auth-stage-pills">
+              {AUTH_STAGE_PILLS.map((pill) => (
+                <span key={pill}>{pill}</span>
+              ))}
+            </div>
+
+            <div className="pc-auth-feature-grid">
+              {AUTH_STAGE_FEATURES.map((feature) => (
+                <article key={feature.id} className="pc-auth-feature-card">
+                  <span className="pc-auth-feature-number">{feature.id}</span>
+                  <strong>{feature.title}</strong>
+                  <p>{feature.detail}</p>
+                </article>
+              ))}
+            </div>
+          </section>
+
+          <section className="pc-auth-card">
+            <div className="pc-auth-brand">
+              <img className="pc-brand-image is-large" src="/pocketcodex-mark.svg" alt="Pocket Codex" />
+              <div>
+                <span className="pc-auth-eyebrow">{authMode === "login" ? "Welcome back" : "Create your access"}</span>
+                <strong>Remote workspace for your local runtime</strong>
+              </div>
+            </div>
+
+            <div className="pc-auth-copy">
+              <h1>{authMode === "login" ? "Sign in on the right host, keep the work on yours" : "Create an account for your paired browsers"}</h1>
+              <p>
+                {authMode === "login"
+                  ? "Use your Pocket Codex account to reconnect trusted browsers, hosts, and secure relay sessions."
+                  : "Start with an account record in the control-plane database while your actual Codex work remains on the local agent."}
+              </p>
+            </div>
+
+            <form className="pc-form-stack" onSubmit={(event) => void handleAuthSubmit(event)}>
+              {authMode === "register" ? (
+                <label className="pc-field">
+                  <span>Name</span>
+                  <input value={authName} onChange={(event) => setAuthName(event.target.value)} />
+                </label>
+              ) : null}
+
               <label className="pc-field">
-                <span>Name</span>
-                <input value={authName} onChange={(event) => setAuthName(event.target.value)} />
+                <span>Email</span>
+                <input
+                  type="email"
+                  value={authEmail}
+                  onChange={(event) => setAuthEmail(event.target.value)}
+                  placeholder="you@example.com"
+                />
               </label>
-            ) : null}
 
-            <label className="pc-field">
-              <span>Email</span>
-              <input
-                type="email"
-                value={authEmail}
-                onChange={(event) => setAuthEmail(event.target.value)}
-                placeholder="you@example.com"
-              />
-            </label>
+              <label className="pc-field">
+                <span>Password</span>
+                <input
+                  type="password"
+                  value={authPassword}
+                  onChange={(event) => setAuthPassword(event.target.value)}
+                  placeholder="••••••••"
+                />
+              </label>
 
-            <label className="pc-field">
-              <span>Password</span>
-              <input
-                type="password"
-                value={authPassword}
-                onChange={(event) => setAuthPassword(event.target.value)}
-                placeholder="••••••••"
-              />
-            </label>
+              {appError ? <div className="pc-inline-alert is-danger">{appError}</div> : null}
 
-            {appError ? <div className="pc-inline-alert is-danger">{appError}</div> : null}
+              <ActionButton variant="primary" type="submit">
+                {authMode === "login" ? "Sign In" : "Create Account"}
+              </ActionButton>
+            </form>
 
-            <ActionButton variant="primary" type="submit">
-              {authMode === "login" ? "Sign In" : "Create Account"}
-            </ActionButton>
-          </form>
-
-          <button
-            className="pc-auth-switch"
-            type="button"
-            onClick={() => setAuthMode((current) => (current === "login" ? "register" : "login"))}
-          >
-            {authMode === "login" ? "Need an account? Create one" : "Already have an account? Sign in"}
-          </button>
+            <button
+              className="pc-auth-switch"
+              type="button"
+              onClick={() => setAuthMode((current) => (current === "login" ? "register" : "login"))}
+            >
+              {authMode === "login" ? "Need an account? Create one" : "Already have an account? Sign in"}
+            </button>
+          </section>
         </section>
       </main>
     );
@@ -2465,7 +2602,7 @@ export function PocketCodexApp() {
         statusRail={
           <>
             {statusBadges.map((status) => (
-              <StatusBadge key={status.label} tone={status.tone}>
+              <StatusBadge key={status.id} tone={status.tone}>
                 {status.label}
               </StatusBadge>
             ))}

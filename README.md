@@ -21,29 +21,30 @@ It does **not** store Codex thread content as the source of truth.
 
 Pocket Codex supports two storage backends for the gateway:
 
-- `json`
-  Default when `DATABASE_URL` is not set. Good for quick local testing.
 - `postgres`
-  Recommended for shared or production-style installs.
+  Default for local development and the recommended control-plane backend.
+- `json`
+  Legacy fallback for quick local testing or debugging without Postgres.
 
 The gateway selects the backend in this order:
 
 1. `POCKET_CODEX_STORAGE_BACKEND=json|postgres`
-2. If unset and `DATABASE_URL` exists, use Postgres
-3. Otherwise use local JSON storage
+2. If unset, use Postgres with `DATABASE_URL`
+3. If `DATABASE_URL` is unset, fall back to `postgres://pocket_codex:pocket_codex@localhost:5432/pocket_codex`
 
 ## Quick start
 
-### Option A: zero-config local mode
+### Option A: local development with Postgres
 
 ```sh
 npm install
+npm run db:up
 npm run dev:gateway
 npm run dev:agent
 npm run dev:web
 ```
 
-This uses the local JSON gateway store under `~/.pocket-codex/`.
+This uses the local Postgres gateway store on `localhost:5432`.
 
 ### Option B: one-command stack with Docker
 
@@ -63,6 +64,7 @@ This starts:
 
 - `gateway`
 - `web`
+- `postgres`
 
 The browser app will be available at:
 
@@ -85,9 +87,9 @@ npm run dev:agent
 
 The agent stays on the host instead of inside Docker because it needs access to the local `codex` CLI/runtime and your real working directory.
 
-### Option C: enable Postgres for the control plane
+### Option C: JSON fallback mode
 
-If you want the gateway to use Postgres instead of JSON:
+If you want the gateway to use the legacy JSON store instead of Postgres:
 
 ```sh
 cp .env.example .env
@@ -96,20 +98,20 @@ cp .env.example .env
 Edit `.env` to set:
 
 ```env
-POCKET_CODEX_STORAGE_BACKEND=postgres
-DATABASE_URL=postgres://pocket_codex:pocket_codex@localhost:5432/pocket_codex
+POCKET_CODEX_STORAGE_BACKEND=json
+DATABASE_URL=
 ```
 
-Then start the DB profile:
+Then start only the web and gateway services:
 
 ```sh
-docker compose --profile postgres up --build
+npm run stack:up:json
 ```
 
 Or use:
 
 ```sh
-npm run stack:up:postgres
+POCKET_CODEX_STORAGE_BACKEND=json npm run dev:gateway
 ```
 
 ### Option D: Postgres only, apps on host
@@ -142,6 +144,7 @@ The gateway will auto-create the required control-plane tables on startup. No se
 ```sh
 npm run stack:up
 npm run stack:up:postgres
+npm run stack:up:json
 npm run stack:down
 npm run stack:logs
 ```
@@ -169,8 +172,8 @@ The most important ones are:
 
 Recommended open-source defaults:
 
-- easiest install: `docker compose up` and let the gateway use JSON
-- upgrade to DB-backed control plane later with the Postgres profile
+- default install: `docker compose up` or `npm run db:up` plus the host dev scripts, both using Postgres
+- JSON remains available as an explicit fallback via `POCKET_CODEX_STORAGE_BACKEND=json`
 
 ## Verification
 

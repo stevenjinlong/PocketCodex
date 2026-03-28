@@ -7,8 +7,8 @@ services:
     environment:
       PORT: 8787
       POCKET_CODEX_WEB_ORIGIN: ${POCKET_CODEX_WEB_ORIGIN:-http://localhost:3000}
-      POCKET_CODEX_STORAGE_BACKEND: ${POCKET_CODEX_STORAGE_BACKEND:-json}
-      DATABASE_URL: ${DATABASE_URL:-}
+      POCKET_CODEX_STORAGE_BACKEND: ${POCKET_CODEX_STORAGE_BACKEND:-postgres}
+      DATABASE_URL: ${DATABASE_URL:-postgres://pocket_codex:pocket_codex@postgres:5432/pocket_codex}
     ports:
       - "8787:8787"
 
@@ -30,7 +30,6 @@ services:
         condition: service_started
 
   postgres:
-    profiles: ["postgres"]
     image: postgres:16-alpine
     restart: unless-stopped
     environment:

@@ -16,6 +16,12 @@ import remarkGfm from "remark-gfm";
 import { Icons } from "./pocket-codex-icons";
 import { ActionButton } from "./pocket-codex-ui";
 
+const EMPTY_STATE_PILLS = [
+  "Secure relay",
+  "DB-backed control plane",
+  "Local runtime",
+];
+
 function codeSummary(language: string | null, code: string): string {
   const lines = code ? code.split("\n").length : 0;
   const prefix = language ? `${language} code` : "Code";
@@ -649,9 +655,22 @@ export function EmptyConversation({
 }) {
   return (
     <div className="pc-empty-conversation">
-      <h2>{title}</h2>
-      <p>{body}</p>
-      {action}
+      <div className="pc-empty-conversation-backdrop" aria-hidden="true">
+        <span className="pc-empty-conversation-glow is-primary" />
+        <span className="pc-empty-conversation-glow is-secondary" />
+        <span className="pc-empty-conversation-grid" />
+      </div>
+      <div className="pc-empty-conversation-copy">
+        <span className="pc-empty-conversation-eyebrow">Pocket Codex</span>
+        <h2>{title}</h2>
+        <p>{body}</p>
+      </div>
+      <div className="pc-empty-conversation-pills">
+        {EMPTY_STATE_PILLS.map((pill) => (
+          <span key={pill}>{pill}</span>
+        ))}
+      </div>
+      {action ? <div className="pc-empty-conversation-action">{action}</div> : null}
     </div>
   );
 }
