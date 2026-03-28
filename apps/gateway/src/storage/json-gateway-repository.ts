@@ -1,4 +1,3 @@
-import { createHash, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -10,6 +9,15 @@ import type {
   RelaySessionSummary,
   UserProfile,
 } from "@pocket-codex/protocol";
+
+import {
+  hashHostSecret,
+  hashPassword,
+  normalizeEmail,
+  randomId,
+  verifyPassword,
+} from "./shared.js";
+import type { GatewayRepository } from "./types.js";
 
 interface StoredUser {
   id: string;
@@ -75,7 +83,7 @@ const DATA_FILE = path.join(DATA_DIR, "gateway-db.json");
 
 function createEmptyDatabase(): StoredDatabase {
   return {
-    serverSecret: randomBytes(32).toString("hex"),
+    serverSecret: randomId("srv"),
     users: [],
     browserDevices: [],
     hosts: [],
@@ -84,109 +92,56 @@ function createEmptyDatabase(): StoredDatabase {
   };
 }
 
-function normalizeEmail(email: string): string {
-  return email.trim().toLowerCase();
-}
-
-function hashPassword(password: string): string {
-  const salt = randomBytes(16);
-  const hash = scryptSync(password, salt, 64);
-  return `${salt.toString("hex")}:${hash.toString("hex")}`;
-}
-
-function verifyPassword(password: string, storedHash: string): boolean {
-  const [saltHex, hashHex] = storedHash.split(":");
-  if (!saltHex || !hashHex) {
-    return false;
-  }
-
-  const salt = Buffer.from(saltHex, "hex");
-  const expected = Buffer.from(hashHex, "hex");
-  const actual = scryptSync(password, salt, expected.length);
-  return timingSafeEqual(actual, expected);
-}
-
-function hashHostSecret(secret: string): string {
-  return createHash("sha256").update(secret).digest("hex");
-}
-
-function randomId(prefix: string): string {
-  return `${prefix}_${randomBytes(10).toString("hex")}`;
-}
-
-export class GatewayStore {
+export class JsonGatewayRepository implements GatewayRepository {
   private database: StoredDatabase;
 
   constructor() {
     this.database = this.readDatabase();
   }
 
-  get serverSecret(): string {
+  async getServerSecret(): Promise<string> {
     return this.database.serverSecret;
   }
 
-  private readDatabase(): StoredDatabase {
-    fs.mkdirSync(DATA_DIR, { recursive: true });
-    if (!fs.existsSync(DATA_FILE)) {
-      const empty = createEmptyDatabase();
-      fs.writeFileSync(DATA_FILE, JSON.stringify(empty, null, 2));
-      return empty;
-    }
-
-    const raw = JSON.parse(fs.readFileSync(DATA_FILE, "utf8")) as Partial<StoredDatabase>;
-    return {
-      serverSecret: raw.serverSecret || randomBytes(32).toString("hex"),
-      users: raw.users || [],
-      browserDevices: raw.browserDevices || [],
-      hosts: raw.hosts || [],
-      pairings: raw.pairings || [],
-      relaySessions: raw.relaySessions || [],
-    };
-  }
-
-  private persist(): void {
-    fs.mkdirSync(DATA_DIR, { recursive: true });
-    fs.writeFileSync(DATA_FILE, JSON.stringify(this.database, null, 2));
-  }
-
-  registerUser(email: string, password: string, name: string): UserProfile {
-    const normalizedEmail = normalizeEmail(email);
-    if (this.database.users.some((user) => user.email === normalizedEmail)) {
+  async registerUser(email: string, password: string, name: string): Promise<UserProfile> {
+    const normalized = normalizeEmail(email);
+    if (this.database.users.some((user) => user.email === normalized)) {
       throw new Error("An account already exists for that email.");
     }
 
     const createdAt = new Date().toISOString();
     const user: StoredUser = {
       id: randomId("usr"),
-      email: normalizedEmail,
-      name: name.trim() || normalizedEmail.split("@")[0] || "Pocket Codex User",
+      email: normalized,
+      name: name.trim() || normalized.split("@")[0] || "Pocket Codex User",
       passwordHash: hashPassword(password),
       createdAt,
     };
+
     this.database.users.push(user);
     this.persist();
     return this.toUserProfile(user);
   }
 
-  authenticateUser(email: string, password: string): UserProfile {
-    const normalizedEmail = normalizeEmail(email);
-    const user = this.database.users.find((candidate) => candidate.email === normalizedEmail);
+  async authenticateUser(email: string, password: string): Promise<UserProfile> {
+    const normalized = normalizeEmail(email);
+    const user = this.database.users.find((candidate) => candidate.email === normalized);
     if (!user || !verifyPassword(password, user.passwordHash)) {
       throw new Error("Invalid email or password.");
     }
     return this.toUserProfile(user);
   }
 
-  findUserById(userId: string): UserProfile | null {
+  async findUserById(userId: string): Promise<UserProfile | null> {
     const user = this.database.users.find((candidate) => candidate.id === userId);
     return user ? this.toUserProfile(user) : null;
   }
 
-  upsertBrowserDevice(input: {
+  async upsertBrowserDevice(input: {
     ownerUserId: string;
     browserDeviceId: string;
     browserName: string;
-  }): BrowserDeviceSummary {
+  }): Promise<BrowserDeviceSummary> {
     const now = new Date().toISOString();
     const existing = this.database.browserDevices.find(
       (device) => device.id === input.browserDeviceId && device.ownerUserId === input.ownerUserId,
@@ -211,27 +166,27 @@ export class GatewayStore {
     return this.toBrowserDeviceSummary(created);
   }
 
-  getBrowserDevice(ownerUserId: string, browserDeviceId: string): BrowserDeviceSummary | null {
+  async getBrowserDevice(ownerUserId: string, browserDeviceId: string): Promise<BrowserDeviceSummary | null> {
     const device = this.database.browserDevices.find(
       (candidate) => candidate.id === browserDeviceId && candidate.ownerUserId === ownerUserId,
     );
     return device ? this.toBrowserDeviceSummary(device) : null;
   }
 
-  listBrowserDevicesForUser(ownerUserId: string): BrowserDeviceSummary[] {
+  async listBrowserDevicesForUser(ownerUserId: string): Promise<BrowserDeviceSummary[]> {
     return this.database.browserDevices
       .filter((device) => device.ownerUserId === ownerUserId)
       .map((device) => this.toBrowserDeviceSummary(device))
       .sort((left, right) => Date.parse(right.lastSeenAt) - Date.parse(left.lastSeenAt));
   }
 
-  registerHost(input: {
+  async registerHost(input: {
     hostId: string;
     hostSecret: string;
     displayName: string;
     platform: string;
     agentVersion: string;
-  }): HostSummary {
+  }): Promise<HostSummary> {
     const now = new Date().toISOString();
     const secretHash = hashHostSecret(input.hostSecret);
     const existing = this.database.hosts.find((host) => host.id === input.hostId);
@@ -265,29 +220,29 @@ export class GatewayStore {
     return this.toHostSummary(host);
   }
 
-  markHostOffline(hostId: string): HostSummary | null {
+  async markHostOffline(hostId: string): Promise<HostSummary | null> {
     const host = this.getHostRecord(hostId);
     if (!host) {
       return null;
     }
+
     host.online = false;
     host.lastSeenAt = new Date().toISOString();
     this.persist();
     return this.toHostSummary(host);
   }
 
-  createPairing(hostId: string): { token: string; expiresAt: string; payload: string } {
+  async createPairing(hostId: string): Promise<{ token: string; expiresAt: string; payload: string }> {
     const host = this.getHostRecord(hostId);
     if (!host) {
       throw new Error("Unknown host.");
     }
 
-    const token = randomBytes(18).toString("base64url");
+    const token = randomId("pair");
     const expiresAt = new Date(Date.now() + 10 * 60_000).toISOString();
     this.database.pairings = this.database.pairings.filter(
-      (pairing) => pairing.hostId !== hostId || pairing.claimedAt,
+      (pairing) => pairing.hostId !== hostId || Boolean(pairing.claimedAt),
     );
-
     this.database.pairings.push({
       token,
       hostId,
@@ -310,12 +265,12 @@ export class GatewayStore {
     return { token, expiresAt, payload: JSON.stringify(payload) };
   }
 
-  claimPairing(input: {
+  async claimPairing(input: {
     userId: string;
     token: string;
     browserDeviceId?: string | null;
     browserName?: string | null;
-  }): { host: HostSummary; browserDevice: BrowserDeviceSummary | null } {
+  }): Promise<{ host: HostSummary; browserDevice: BrowserDeviceSummary | null }> {
     const pairing = this.database.pairings.find((candidate) => candidate.token === input.token);
     if (!pairing) {
       throw new Error("That pairing code was not found.");
@@ -342,7 +297,7 @@ export class GatewayStore {
 
     let browserDevice: BrowserDeviceSummary | null = null;
     if (input.browserDeviceId) {
-      browserDevice = this.upsertBrowserDevice({
+      browserDevice = await this.upsertBrowserDevice({
         ownerUserId: input.userId,
         browserDeviceId: input.browserDeviceId,
         browserName: input.browserName?.trim() || "Pocket Codex Browser",
@@ -357,7 +312,7 @@ export class GatewayStore {
     };
   }
 
-  createRelaySession(input: {
+  async createRelaySession(input: {
     sessionId: string;
     hostId: string;
     ownerUserId: string;
@@ -366,7 +321,7 @@ export class GatewayStore {
     browserPublicKey: JsonWebKey;
     agentPublicKey: JsonWebKey;
     createdAt?: string;
-  }): RelaySessionSummary {
+  }): Promise<RelaySessionSummary> {
     const now = input.createdAt || new Date().toISOString();
     const session: StoredRelaySession = {
       id: input.sessionId,
@@ -385,7 +340,7 @@ export class GatewayStore {
     return this.toRelaySessionSummary(session);
   }
 
-  getRelaySession(sessionId: string): RelaySessionSummary | null {
+  async getRelaySession(sessionId: string): Promise<RelaySessionSummary | null> {
     const session = this.getRelaySessionRecord(sessionId);
     if (!session || session.endedAt) {
       return null;
@@ -393,7 +348,7 @@ export class GatewayStore {
     return this.toRelaySessionSummary(session);
   }
 
-  touchRelaySession(sessionId: string): RelaySessionSummary | null {
+  async touchRelaySession(sessionId: string): Promise<RelaySessionSummary | null> {
     const session = this.getRelaySessionRecord(sessionId);
     if (!session || session.endedAt) {
       return null;
@@ -403,12 +358,12 @@ export class GatewayStore {
     return this.toRelaySessionSummary(session);
   }
 
-  validateRelaySession(input: {
+  async validateRelaySession(input: {
     sessionId: string;
     hostId: string;
     ownerUserId: string;
     browserDeviceId?: string | null;
-  }): RelaySessionSummary | null {
+  }): Promise<RelaySessionSummary | null> {
     const session = this.getRelaySessionRecord(input.sessionId);
     if (!session || session.endedAt) {
       return null;
@@ -422,7 +377,7 @@ export class GatewayStore {
     return this.toRelaySessionSummary(session);
   }
 
-  listHostsForUser(userId: string): HostSummary[] {
+  async listHostsForUser(userId: string): Promise<HostSummary[]> {
     return this.database.hosts
       .filter((host) => host.ownerUserId === userId)
       .map((host) => this.toHostSummary(host))
@@ -433,13 +388,39 @@ export class GatewayStore {
       });
   }
 
-  getHostSummary(hostId: string): HostSummary | null {
+  async getHostSummary(hostId: string): Promise<HostSummary | null> {
     const host = this.getHostRecord(hostId);
     return host ? this.toHostSummary(host) : null;
   }
 
-  getHostOwner(hostId: string): string | null {
+  async getHostOwner(hostId: string): Promise<string | null> {
     return this.getHostRecord(hostId)?.ownerUserId || null;
+  }
+
+  async close(): Promise<void> {}
+
+  private readDatabase(): StoredDatabase {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+    if (!fs.existsSync(DATA_FILE)) {
+      const empty = createEmptyDatabase();
+      fs.writeFileSync(DATA_FILE, JSON.stringify(empty, null, 2));
+      return empty;
+    }
+
+    const raw = JSON.parse(fs.readFileSync(DATA_FILE, "utf8")) as Partial<StoredDatabase>;
+    return {
+      serverSecret: raw.serverSecret || randomId("srv"),
+      users: raw.users || [],
+      browserDevices: raw.browserDevices || [],
+      hosts: raw.hosts || [],
+      pairings: raw.pairings || [],
+      relaySessions: raw.relaySessions || [],
+    };
+  }
+
+  private persist(): void {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+    fs.writeFileSync(DATA_FILE, JSON.stringify(this.database, null, 2));
   }
 
   private getHostRecord(hostId: string): StoredHost | undefined {

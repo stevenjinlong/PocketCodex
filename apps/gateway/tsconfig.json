@@ -1,6 +1,11 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
+    "baseUrl": "../..",
+    "paths": {
+      "@pocket-codex/db": ["packages/db/src/index.ts"],
+      "@pocket-codex/protocol": ["packages/protocol/src/index.ts"]
+    },
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
     "outDir": "dist"

@@ -13,7 +13,9 @@
   ],
   "types": "./dist/index.d.ts",
   "scripts": {
+    "prebuild": "npm run build --workspace @pocket-codex/protocol",
     "build": "tsc -p tsconfig.json",
+    "pretypecheck": "npm run build --workspace @pocket-codex/protocol",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {

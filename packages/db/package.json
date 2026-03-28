@@ -3,11 +3,16 @@
   "version": "0.1.0",
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
   },
-  "types": "./src/index.ts",
+  "types": "./dist/index.d.ts",
   "scripts": {
+    "prebuild": "npm run build --workspace @pocket-codex/protocol",
     "build": "tsc -p tsconfig.json",
+    "pretypecheck": "npm run build --workspace @pocket-codex/protocol",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {

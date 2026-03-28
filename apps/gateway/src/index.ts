@@ -1,3 +1,5 @@
+import "dotenv/config";
+
 import { createServer } from "node:http";
 import { TextEncoder } from "node:util";
 
@@ -15,17 +17,10 @@ import express, { type NextFunction, type Request, type Response } from "express
 import { SignJWT, jwtVerify } from "jose";
 import { WebSocket, WebSocketServer } from "ws";
 
-import { GatewayStore } from "./store.js";
+import { createGatewayRepository } from "./storage/index.js";
 
 const PORT = Number(process.env.PORT || 8787);
 const WEB_ORIGIN = process.env.POCKET_CODEX_WEB_ORIGIN || "http://localhost:3000";
-
-const store = new GatewayStore();
-const jwtSecret = new TextEncoder().encode(store.serverSecret);
-const app = express();
-
-app.use(cors({ origin: WEB_ORIGIN }));
-app.use(express.json());
 
 type AuthenticatedRequest = Request & {
   user: UserProfile;
@@ -43,6 +38,23 @@ type PendingSessionInit = {
   browserDevice: BrowserDeviceSummary;
   browserPublicKey: JsonWebKey;
 };
+
+const repository = await createGatewayRepository();
+const jwtSecret = new TextEncoder().encode(await repository.getServerSecret());
+const app = express();
+const httpServer = createServer(app);
+const browserWss = new WebSocketServer({ noServer: true });
+const agentWss = new WebSocketServer({ noServer: true });
+
+const browserSockets = new Map<string, Set<WebSocket>>();
+const browserSocketState = new WeakMap<WebSocket, BrowserSocketState>();
+const sessionSockets = new Map<string, WebSocket>();
+const agentSockets = new Map<string, WebSocket>();
+const pendingRequests = new Map<string, WebSocket>();
+const pendingSessionInits = new Map<string, PendingSessionInit>();
+
+app.use(cors({ origin: WEB_ORIGIN }));
+app.use(express.json());
 
 async function issueToken(user: UserProfile): Promise<string> {
   return new SignJWT({
@@ -70,7 +82,7 @@ async function requireUser(
     }
 
     const verified = await jwtVerify(token, jwtSecret);
-    const user = store.findUserById(String(verified.payload.sub || ""));
+    const user = await repository.findUserById(String(verified.payload.sub || ""));
     if (!user) {
       response.status(401).json({ error: "Unknown user." });
       return;
@@ -114,17 +126,6 @@ function sendBrowserRequestError(socket: WebSocket, requestId: string, message: 
   });
 }
 
-const httpServer = createServer(app);
-const browserWss = new WebSocketServer({ noServer: true });
-const agentWss = new WebSocketServer({ noServer: true });
-
-const browserSockets = new Map<string, Set<WebSocket>>();
-const browserSocketState = new WeakMap<WebSocket, BrowserSocketState>();
-const sessionSockets = new Map<string, WebSocket>();
-const agentSockets = new Map<string, WebSocket>();
-const pendingRequests = new Map<string, WebSocket>();
-const pendingSessionInits = new Map<string, PendingSessionInit>();
-
 function ensureBrowserSocketSet(userId: string): Set<WebSocket> {
   const existing = browserSockets.get(userId);
   if (existing) {
@@ -135,7 +136,7 @@ function ensureBrowserSocketSet(userId: string): Set<WebSocket> {
   return created;
 }
 
-function broadcastHostStatus(userId: string, host: HostSummary): void {
+async function broadcastHostStatus(userId: string, host: HostSummary): Promise<void> {
   const sockets = browserSockets.get(userId);
   if (!sockets) {
     return;
@@ -151,7 +152,7 @@ function broadcastHostStatus(userId: string, host: HostSummary): void {
   }
 }
 
-function broadcastHostList(userId: string): void {
+async function broadcastHostList(userId: string): Promise<void> {
   const sockets = browserSockets.get(userId);
   if (!sockets) {
     return;
@@ -159,7 +160,7 @@ function broadcastHostList(userId: string): void {
 
   const message: BrowserInboundMessage = {
     type: "host:list",
-    hosts: store.listHostsForUser(userId),
+    hosts: await repository.listHostsForUser(userId),
   };
 
   for (const socket of sockets) {
@@ -167,8 +168,11 @@ function broadcastHostList(userId: string): void {
   }
 }
 
-function resolveHostAccess(userId: string, hostId: string): { host: HostSummary; agentSocket: WebSocket } | null {
-  const host = store.getHostSummary(hostId);
+async function resolveHostAccess(
+  userId: string,
+  hostId: string,
+): Promise<{ host: HostSummary; agentSocket: WebSocket } | null> {
+  const host = await repository.getHostSummary(hostId);
   if (!host || host.ownerUserId !== userId) {
     return null;
   }
@@ -195,7 +199,7 @@ app.post("/api/auth/register", async (request, response) => {
       return;
     }
 
-    const user = store.registerUser(email, password, name);
+    const user = await repository.registerUser(email, password, name);
     const token = await issueToken(user);
     response.json({ token, user });
   } catch (error) {
@@ -207,7 +211,7 @@ app.post("/api/auth/login", async (request, response) => {
   try {
     const email = String(request.body?.email || "");
     const password = String(request.body?.password || "");
-    const user = store.authenticateUser(email, password);
+    const user = await repository.authenticateUser(email, password);
     const token = await issueToken(user);
     response.json({ token, user });
   } catch (error) {
@@ -215,16 +219,16 @@ app.post("/api/auth/login", async (request, response) => {
   }
 });
 
-app.get("/api/me", requireUser, (request, response) => {
+app.get("/api/me", requireUser, async (request, response) => {
   const user = (request as AuthenticatedRequest).user;
   response.json({
     user,
-    hosts: store.listHostsForUser(user.id),
-    browserDevices: store.listBrowserDevicesForUser(user.id),
+    hosts: await repository.listHostsForUser(user.id),
+    browserDevices: await repository.listBrowserDevicesForUser(user.id),
   });
 });
 
-app.post("/api/pairings/claim", requireUser, (request, response) => {
+app.post("/api/pairings/claim", requireUser, async (request, response) => {
   try {
     const token = String(request.body?.token || "");
     const browserDeviceId = request.body?.browserDeviceId ? String(request.body.browserDeviceId) : null;
@@ -236,15 +240,15 @@ app.post("/api/pairings/claim", requireUser, (request, response) => {
     }
 
     const user = (request as AuthenticatedRequest).user;
-    const result = store.claimPairing({
+    const result = await repository.claimPairing({
       userId: user.id,
       token,
       browserDeviceId,
       browserName,
     });
 
-    broadcastHostStatus(user.id, result.host);
-    broadcastHostList(user.id);
+    await broadcastHostStatus(user.id, result.host);
+    await broadcastHostList(user.id);
 
     const agentSocket = agentSockets.get(result.host.id);
     if (agentSocket) {
@@ -291,7 +295,7 @@ browserWss.on("connection", (socket) => {
     if (message.type === "browser:subscribe") {
       try {
         const verified = await jwtVerify(message.token, jwtSecret);
-        const user = store.findUserById(String(verified.payload.sub || ""));
+        const user = await repository.findUserById(String(verified.payload.sub || ""));
         if (!user) {
           throw new Error("Unknown user.");
         }
@@ -308,7 +312,7 @@ browserWss.on("connection", (socket) => {
         });
         sendJson<BrowserInboundMessage>(socket, {
           type: "host:list",
-          hosts: store.listHostsForUser(user.id),
+          hosts: await repository.listHostsForUser(user.id),
         });
       } catch {
         sendBrowserError(socket, "Authentication failed.");
@@ -326,19 +330,19 @@ browserWss.on("connection", (socket) => {
     if (message.type === "host:list") {
       sendJson<BrowserInboundMessage>(socket, {
         type: "host:list",
-        hosts: store.listHostsForUser(state.userId),
+        hosts: await repository.listHostsForUser(state.userId),
       });
       return;
     }
 
     if (message.type === "host:session:init") {
-      const resolved = resolveHostAccess(state.userId, message.hostId);
+      const resolved = await resolveHostAccess(state.userId, message.hostId);
       if (!resolved) {
         sendBrowserRequestError(socket, message.requestId, "That host is offline or not paired to your account.");
         return;
       }
 
-      const browserDevice = store.upsertBrowserDevice({
+      const browserDevice = await repository.upsertBrowserDevice({
         ownerUserId: state.userId,
         browserDeviceId: message.browserDeviceId,
         browserName: message.browserName,
@@ -367,13 +371,13 @@ browserWss.on("connection", (socket) => {
     }
 
     if (message.type === "session:message") {
-      const resolved = resolveHostAccess(state.userId, message.hostId);
+      const resolved = await resolveHostAccess(state.userId, message.hostId);
       if (!resolved) {
         sendBrowserError(socket, "That host is offline or not paired to your account.");
         return;
       }
 
-      const session = store.validateRelaySession({
+      const session = await repository.validateRelaySession({
         sessionId: message.sessionId,
         hostId: message.hostId,
         ownerUserId: state.userId,
@@ -385,7 +389,7 @@ browserWss.on("connection", (socket) => {
         return;
       }
 
-      store.touchRelaySession(session.id);
+      await repository.touchRelaySession(session.id);
       sessionSockets.set(session.id, socket);
 
       sendJson<AgentInboundMessage>(resolved.agentSocket, {
@@ -402,7 +406,7 @@ browserWss.on("connection", (socket) => {
       return;
     }
 
-    const resolved = resolveHostAccess(state.userId, hostId);
+    const resolved = await resolveHostAccess(state.userId, hostId);
     if (!resolved) {
       sendBrowserRequestError(socket, message.requestId, "That host is offline or not paired to your account.");
       return;
@@ -423,8 +427,10 @@ browserWss.on("connection", (socket) => {
                   hostId: message.hostId,
                   threadId: message.threadId,
                   input: message.input,
+                  attachments: message.attachments,
                   cwd: message.cwd,
                   model: message.model,
+                  reasoningEffort: message.reasoningEffort,
                   approvalPolicy: message.approvalPolicy,
                   sandbox: message.sandbox,
                 }
@@ -433,7 +439,9 @@ browserWss.on("connection", (socket) => {
                     type: "turn:steer",
                     hostId: message.hostId,
                     threadId: message.threadId,
+                    turnId: message.turnId,
                     input: message.input,
+                    attachments: message.attachments,
                   }
                 : {
                     type: "turn:interrupt",
@@ -481,7 +489,7 @@ browserWss.on("connection", (socket) => {
 agentWss.on("connection", (socket) => {
   let hostId: string | null = null;
 
-  socket.on("message", (payload) => {
+  socket.on("message", async (payload) => {
     const message = parseJson<AgentOutboundMessage>(payload);
     if (!message) {
       sendJson<AgentInboundMessage>(socket, {
@@ -493,7 +501,7 @@ agentWss.on("connection", (socket) => {
 
     if (message.type === "agent:hello") {
       try {
-        const host = store.registerHost({
+        const host = await repository.registerHost({
           hostId: message.hostId,
           hostSecret: message.hostSecret,
           displayName: message.displayName,
@@ -509,8 +517,8 @@ agentWss.on("connection", (socket) => {
         });
 
         if (host.ownerUserId) {
-          broadcastHostStatus(host.ownerUserId, host);
-          broadcastHostList(host.ownerUserId);
+          await broadcastHostStatus(host.ownerUserId, host);
+          await broadcastHostList(host.ownerUserId);
         }
       } catch (error) {
         sendJson<AgentInboundMessage>(socket, {
@@ -532,7 +540,7 @@ agentWss.on("connection", (socket) => {
 
     if (message.type === "agent:pairing:create") {
       try {
-        const pairing = store.createPairing(hostId);
+        const pairing = await repository.createPairing(hostId);
         sendJson<AgentInboundMessage>(socket, {
           type: "agent:pairing:created",
           token: pairing.token,
@@ -555,7 +563,7 @@ agentWss.on("connection", (socket) => {
       }
 
       pendingSessionInits.delete(message.requestId);
-      const session = store.createRelaySession({
+      const session = await repository.createRelaySession({
         sessionId: message.session.id,
         hostId: pending.hostId,
         ownerUserId: pending.userId,
@@ -576,12 +584,12 @@ agentWss.on("connection", (socket) => {
     }
 
     if (message.type === "agent:session:message") {
-      const session = store.getRelaySession(message.sessionId);
+      const session = await repository.getRelaySession(message.sessionId);
       if (!session) {
         return;
       }
 
-      store.touchRelaySession(session.id);
+      await repository.touchRelaySession(session.id);
       const browserSocket = sessionSockets.get(session.id);
       if (!browserSocket) {
         return;
@@ -614,7 +622,7 @@ agentWss.on("connection", (socket) => {
     }
 
     if (message.type === "agent:event") {
-      const ownerUserId = store.getHostOwner(hostId);
+      const ownerUserId = await repository.getHostOwner(hostId);
       if (!ownerUserId) {
         return;
       }
@@ -643,14 +651,29 @@ agentWss.on("connection", (socket) => {
     }
 
     agentSockets.delete(hostId);
-    const host = store.markHostOffline(hostId);
-    if (host?.ownerUserId) {
-      broadcastHostStatus(host.ownerUserId, host);
-      broadcastHostList(host.ownerUserId);
-    }
+    void (async () => {
+      const host = await repository.markHostOffline(hostId as string);
+      if (host?.ownerUserId) {
+        await broadcastHostStatus(host.ownerUserId, host);
+        await broadcastHostList(host.ownerUserId);
+      }
+    })();
   });
 });
 
 httpServer.listen(PORT, () => {
   console.log(`[pocket-codex/gateway] listening on http://localhost:${PORT}`);
+});
+
+async function shutdown(): Promise<void> {
+  await repository.close();
+  httpServer.close();
+}
+
+process.once("SIGINT", () => {
+  void shutdown().finally(() => process.exit(0));
+});
+
+process.once("SIGTERM", () => {
+  void shutdown().finally(() => process.exit(0));
 });

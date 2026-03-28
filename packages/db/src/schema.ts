@@ -8,13 +8,19 @@ import {
   timestamp,
   uniqueIndex,
 } from "drizzle-orm/pg-core";
-import type { PairingQrPayload, TimelineItem } from "@pocket-codex/protocol";
+import type { PairingQrPayload } from "@pocket-codex/protocol";
 
 export const relaySessionStatusEnum = pgEnum("relay_session_status", [
   "active",
   "closed",
   "revoked",
 ]);
+
+export const gatewayConfig = pgTable("gateway_config", {
+  key: text("key").primaryKey(),
+  value: text("value").notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
 
 export const users = pgTable(
   "users",
@@ -93,6 +99,7 @@ export const relaySessions = pgTable(
     browserDeviceId: text("browser_device_id")
       .notNull()
       .references(() => browserDevices.id, { onDelete: "cascade" }),
+    browserName: text("browser_name").notNull(),
     status: relaySessionStatusEnum("status").notNull().default("active"),
     browserPublicKey: jsonb("browser_public_key").$type<JsonWebKey>().notNull(),
     agentPublicKey: jsonb("agent_public_key").$type<JsonWebKey>().notNull(),
@@ -107,60 +114,13 @@ export const relaySessions = pgTable(
   ],
 );
 
-export const mirroredThreads = pgTable(
-  "mirrored_threads",
-  {
-    id: text("id").primaryKey(),
-    hostId: text("host_id")
-      .notNull()
-      .references(() => hosts.id, { onDelete: "cascade" }),
-    ownerUserId: text("owner_user_id")
-      .notNull()
-      .references(() => users.id, { onDelete: "cascade" }),
-    name: text("name"),
-    preview: text("preview").notNull().default(""),
-    cwd: text("cwd"),
-    status: text("status").notNull().default("idle"),
-    source: text("source"),
-    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-    syncedAt: timestamp("synced_at", { withTimezone: true }).notNull().defaultNow(),
-    metadata: jsonb("metadata").$type<Record<string, unknown>>().notNull().default({}),
-  },
-  (table) => [
-    index("mirrored_threads_host_idx").on(table.hostId),
-    index("mirrored_threads_owner_idx").on(table.ownerUserId),
-  ],
-);
-
-export const mirroredTurns = pgTable(
-  "mirrored_turns",
-  {
-    id: text("id").primaryKey(),
-    threadId: text("thread_id")
-      .notNull()
-      .references(() => mirroredThreads.id, { onDelete: "cascade" }),
-    hostId: text("host_id")
-      .notNull()
-      .references(() => hosts.id, { onDelete: "cascade" }),
-    status: text("status").notNull().default("idle"),
-    error: text("error"),
-    items: jsonb("items").$type<TimelineItem[]>().notNull().default([]),
-    syncedAt: timestamp("synced_at", { withTimezone: true }).notNull().defaultNow(),
-  },
-  (table) => [
-    index("mirrored_turns_thread_idx").on(table.threadId),
-    index("mirrored_turns_host_idx").on(table.hostId),
-  ],
-);
-
 export const schema = {
+  gatewayConfig,
   users,
   browserDevices,
   hosts,
   pairings,
   relaySessions,
-  mirroredThreads,
-  mirroredTurns,
 };
 
 export type PocketCodexSchema = typeof schema;

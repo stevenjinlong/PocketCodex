@@ -1,0 +1,51 @@
+services:
+  gateway:
+    build:
+      context: .
+      dockerfile: apps/gateway/Dockerfile
+    restart: unless-stopped
+    environment:
+      PORT: 8787
+      POCKET_CODEX_WEB_ORIGIN: ${POCKET_CODEX_WEB_ORIGIN:-http://localhost:3000}
+      POCKET_CODEX_STORAGE_BACKEND: ${POCKET_CODEX_STORAGE_BACKEND:-json}
+      DATABASE_URL: ${DATABASE_URL:-}
+    ports:
+      - "8787:8787"
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        NEXT_PUBLIC_GATEWAY_HTTP_URL: ${NEXT_PUBLIC_GATEWAY_HTTP_URL:-http://localhost:8787}
+        NEXT_PUBLIC_GATEWAY_WS_URL: ${NEXT_PUBLIC_GATEWAY_WS_URL:-ws://localhost:8787/ws/browser}
+    restart: unless-stopped
+    environment:
+      NEXT_PUBLIC_GATEWAY_HTTP_URL: ${NEXT_PUBLIC_GATEWAY_HTTP_URL:-http://localhost:8787}
+      NEXT_PUBLIC_GATEWAY_WS_URL: ${NEXT_PUBLIC_GATEWAY_WS_URL:-ws://localhost:8787/ws/browser}
+    ports:
+      - "3000:3000"
+    depends_on:
+      gateway:
+        condition: service_started
+
+  postgres:
+    profiles: ["postgres"]
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-pocket_codex}
+      POSTGRES_USER: ${POSTGRES_USER:-pocket_codex}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pocket_codex}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - pocket_codex_postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-pocket_codex} -d ${POSTGRES_DB:-pocket_codex}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  pocket_codex_postgres:

@@ -1,5 +1,69 @@
 export type ApprovalPolicy = "never" | "on-request" | "untrusted";
 export type SandboxMode = "read-only" | "workspace-write" | "danger-full-access";
+export type ReasoningEffort = "none" | "minimal" | "low" | "medium" | "high" | "xhigh";
+export type ServiceTier = "fast";
+export type CollaborationMode = "default" | "plan";
+
+export interface ThreadGitInfo {
+  branch: string | null;
+  sha: string | null;
+  originUrl: string | null;
+}
+
+export interface ModelReasoningOption {
+  reasoningEffort: ReasoningEffort;
+  description: string;
+}
+
+export interface ModelOption {
+  id: string;
+  model: string;
+  displayName: string;
+  description: string;
+  hidden: boolean;
+  supportsPersonality: boolean;
+  isDefault: boolean;
+  inputModalities: string[];
+  defaultReasoningEffort: ReasoningEffort | null;
+  supportedReasoningEfforts: ModelReasoningOption[];
+  upgrade: string | null;
+}
+
+export interface CollaborationModeOption {
+  name: string;
+  mode: string;
+  model: string | null;
+  reasoningEffort: ReasoningEffort | null;
+}
+
+export interface RuntimeAccountSummary {
+  accountType: string | null;
+  requiresOpenaiAuth: boolean;
+}
+
+export interface RuntimeConfigResult {
+  models: ModelOption[];
+  collaborationModes: CollaborationModeOption[];
+  account: RuntimeAccountSummary | null;
+  rateLimitsError: string | null;
+}
+
+export interface GitBranchSummary {
+  name: string;
+  current: boolean;
+}
+
+export interface GitInspectResult {
+  cwd: string | null;
+  root: string | null;
+  branch: string | null;
+  clean: boolean;
+  ahead: number;
+  behind: number;
+  branches: GitBranchSummary[];
+  statusText: string;
+  diffText: string;
+}
 
 export interface UserProfile {
   id: string;
@@ -40,10 +104,23 @@ export interface ThreadSummary {
   preview: string;
   name: string | null;
   cwd: string | null;
+  path: string | null;
   updatedAt: number;
   createdAt: number;
   status: string;
   source: string | null;
+  model: string | null;
+  modelProvider: string | null;
+  agentNickname: string | null;
+  agentRole: string | null;
+  parentThreadId: string | null;
+  forkedFromThreadId: string | null;
+  gitInfo: ThreadGitInfo | null;
+}
+
+export interface UserAttachmentSummary {
+  kind: "image" | "file";
+  label: string;
 }
 
 export type TimelineItem =
@@ -51,12 +128,18 @@ export type TimelineItem =
       kind: "user-message";
       id: string;
       text: string;
+      attachments?: UserAttachmentSummary[];
     }
   | {
       kind: "assistant-message";
       id: string;
       text: string;
       phase: string | null;
+    }
+  | {
+      kind: "plan";
+      id: string;
+      text: string;
     }
   | {
       kind: "reasoning";
@@ -99,6 +182,61 @@ export interface ThreadSnapshot extends ThreadSummary {
   turns: TurnSnapshot[];
 }
 
+export interface ThreadsListResult {
+  threads: ThreadSummary[];
+}
+
+export interface ThreadReadResult {
+  thread: ThreadSnapshot;
+}
+
+export interface TurnStartResult {
+  threadId: string;
+  turnId: string | null;
+}
+
+export interface TurnSteerResult {
+  turnId: string | null;
+}
+
+export interface ThreadMutationResult {
+  ok: true;
+}
+
+export interface ThreadForkResult {
+  thread: ThreadSnapshot;
+}
+
+export interface ReviewStartResult {
+  threadId: string;
+  turnId: string | null;
+}
+
+export type BrowserAttachment =
+  | {
+      kind: "text";
+      name: string;
+      mimeType: string;
+      content: string;
+    }
+  | {
+      kind: "image";
+      name: string;
+      mimeType: string;
+      url: string;
+    }
+  | {
+      kind: "binary";
+      name: string;
+      mimeType: string;
+    };
+
+export interface RelayEventTarget {
+  threadId: string | null;
+  turnId: string | null;
+  itemId: string | null;
+}
+
 export interface RawCodexNotification {
   method: string;
   params: Record<string, unknown>;
@@ -119,6 +257,7 @@ export type AgentCommand =
   | {
       type: "threads:list";
       hostId: string;
+      archived?: boolean | null;
     }
   | {
       type: "thread:read";
@@ -126,26 +265,103 @@ export type AgentCommand =
       threadId: string;
     }
   | {
+      type: "runtime:config";
+      hostId: string;
+    }
+  | {
+      type: "thread:rename";
+      hostId: string;
+      threadId: string;
+      name: string;
+    }
+  | {
+      type: "thread:archive";
+      hostId: string;
+      threadId: string;
+    }
+  | {
+      type: "thread:unarchive";
+      hostId: string;
+      threadId: string;
+    }
+  | {
+      type: "thread:fork";
+      hostId: string;
+      threadId: string;
+      cwd?: string | null;
+      model?: string | null;
+      modelProvider?: string | null;
+      sandbox?: SandboxMode | null;
+      serviceTier?: ServiceTier | null;
+    }
+  | {
       type: "turn:start";
       hostId: string;
       threadId?: string | null;
       input: string;
+      attachments?: BrowserAttachment[] | null;
       cwd?: string | null;
       model?: string | null;
+      reasoningEffort?: ReasoningEffort | null;
       approvalPolicy?: ApprovalPolicy | null;
       sandbox?: SandboxMode | null;
+      serviceTier?: ServiceTier | null;
+      collaborationMode?: CollaborationMode | null;
     }
   | {
       type: "turn:steer";
       hostId: string;
       threadId: string;
+      turnId: string;
       input: string;
+      attachments?: BrowserAttachment[] | null;
+      collaborationMode?: CollaborationMode | null;
     }
   | {
       type: "turn:interrupt";
       hostId: string;
       threadId: string;
       turnId?: string | null;
+    }
+  | {
+      type: "review:start";
+      hostId: string;
+      threadId: string;
+      target: "uncommitted-changes";
+      baseBranch?: string | null;
+    }
+  | {
+      type: "git:inspect";
+      hostId: string;
+      cwd: string;
+    }
+  | {
+      type: "git:commit";
+      hostId: string;
+      cwd: string;
+      message?: string | null;
+    }
+  | {
+      type: "git:push";
+      hostId: string;
+      cwd: string;
+    }
+  | {
+      type: "git:pull";
+      hostId: string;
+      cwd: string;
+    }
+  | {
+      type: "git:checkout";
+      hostId: string;
+      cwd: string;
+      branch: string;
+    }
+  | {
+      type: "git:create-branch";
+      hostId: string;
+      cwd: string;
+      branch: string;
     };
 
 export interface RelayEnvelope {
@@ -292,8 +508,10 @@ export type BrowserOutboundMessage =
       hostId: string;
       threadId?: string | null;
       input: string;
+      attachments?: BrowserAttachment[] | null;
       cwd?: string | null;
       model?: string | null;
+      reasoningEffort?: ReasoningEffort | null;
       approvalPolicy?: ApprovalPolicy | null;
       sandbox?: SandboxMode | null;
     }
@@ -302,7 +520,9 @@ export type BrowserOutboundMessage =
       requestId: string;
       hostId: string;
       threadId: string;
+      turnId: string;
       input: string;
+      attachments?: BrowserAttachment[] | null;
     }
   | {
       type: "host:turn:interrupt";
@@ -371,6 +591,43 @@ function joinTextParts(content: unknown): string {
     .join("");
 }
 
+function readUserAttachmentSummaries(content: unknown): UserAttachmentSummary[] {
+  if (!Array.isArray(content)) {
+    return [];
+  }
+
+  const summaries: UserAttachmentSummary[] = [];
+
+  for (const part of content) {
+    if (!part || typeof part !== "object") {
+      continue;
+    }
+
+    const type = typeof (part as { type?: unknown }).type === "string" ? String((part as { type?: unknown }).type) : "";
+    if (type === "image") {
+      summaries.push({ kind: "image", label: "Image attached" });
+      continue;
+    }
+
+    if (type === "localImage") {
+      summaries.push({ kind: "image", label: "Local image attached" });
+      continue;
+    }
+
+    if (type === "text") {
+      continue;
+    }
+
+    summaries.push({ kind: "file", label: `${type || "Attachment"} attached` });
+  }
+
+  return summaries;
+}
+
+function hasStructuredContent(value: unknown): boolean {
+  return Array.isArray(value) ? value.length > 0 : Boolean(value);
+}
+
 function stringifyDetail(value: unknown): string {
   if (value == null) {
     return "";
@@ -381,8 +638,50 @@ function stringifyDetail(value: unknown): string {
   return JSON.stringify(value, null, 2);
 }
 
+function readString(value: unknown): string | null {
+  return typeof value === "string" && value ? value : null;
+}
+
+function mergeFileChangeOutput(changes: unknown): string {
+  if (!Array.isArray(changes)) {
+    return "";
+  }
+
+  return changes
+    .map((change) => {
+      if (!change || typeof change !== "object") {
+        return "";
+      }
+
+      const path = readString((change as { path?: unknown }).path) || "file";
+      const diff = stringifyDetail((change as { diff?: unknown }).diff);
+      return diff ? `${path}\n${diff}` : path;
+    })
+    .filter(Boolean)
+    .join("\n\n");
+}
+
 export function createRequestId(prefix = "req"): string {
   return `${prefix}_${Math.random().toString(36).slice(2, 10)}_${Date.now().toString(36)}`;
+}
+
+export function parsePairingQrPayload(value: string): PairingQrPayload | null {
+  try {
+    const parsed = JSON.parse(value) as Partial<PairingQrPayload>;
+    if (
+      parsed.v === 1 &&
+      parsed.kind === "pocket-codex-pairing" &&
+      typeof parsed.token === "string" &&
+      typeof parsed.hostId === "string" &&
+      typeof parsed.displayName === "string" &&
+      typeof parsed.expiresAt === "string"
+    ) {
+      return parsed as PairingQrPayload;
+    }
+    return null;
+  } catch {
+    return null;
+  }
 }
 
 export function normalizeTimelineItem(item: Record<string, unknown>): TimelineItem {
@@ -394,6 +693,7 @@ export function normalizeTimelineItem(item: Record<string, unknown>): TimelineIt
       kind: "user-message",
       id,
       text: joinTextParts(item.content),
+      attachments: readUserAttachmentSummaries(item.content),
     };
   }
 
@@ -406,11 +706,24 @@ export function normalizeTimelineItem(item: Record<string, unknown>): TimelineIt
     };
   }
 
+  if (type === "plan") {
+    return {
+      kind: "plan",
+      id,
+      text: String(item.text || ""),
+    };
+  }
+
   if (type === "reasoning") {
+    const summaryText = joinTextParts(item.summary);
+    const contentText = joinTextParts(item.content);
     return {
       kind: "reasoning",
       id,
-      text: joinTextParts(item.summary) || stringifyDetail(item.content),
+      text:
+        summaryText ||
+        contentText ||
+        (hasStructuredContent(item.content) ? stringifyDetail(item.content) : ""),
     };
   }
 
@@ -419,25 +732,67 @@ export function normalizeTimelineItem(item: Record<string, unknown>): TimelineIt
       kind: "command",
       id,
       title: String(item.command || item.title || "Command"),
-      output: stringifyDetail(item.output || item.stdout || item.stderr),
-    };
-  }
-
-  if (type === "toolCall") {
-    return {
-      kind: "tool",
-      id,
-      title: String(item.title || item.name || item.toolName || "Tool"),
-      output: stringifyDetail(item.output || item.result),
+      output: stringifyDetail(item.aggregatedOutput || item.output || item.stdout || item.stderr),
     };
   }
 
   if (type === "fileChange") {
+    const mergedOutput = mergeFileChangeOutput(item.changes);
+    const firstChange =
+      Array.isArray(item.changes) && item.changes[0] && typeof item.changes[0] === "object"
+        ? (item.changes[0] as { path?: unknown })
+        : null;
+
     return {
       kind: "file-change",
       id,
-      title: String(item.path || item.filePath || item.title || "File change"),
-      output: stringifyDetail(item.diff || item.patch || item.output),
+      title: readString(firstChange?.path) || String(item.path || item.filePath || item.title || "File change"),
+      output: mergedOutput || stringifyDetail(item.diff || item.patch || item.output),
+    };
+  }
+
+  if (type === "mcpToolCall") {
+    return {
+      kind: "tool",
+      id,
+      title: `${String(item.server || "mcp")}/${String(item.tool || "tool")}`,
+      output: stringifyDetail(item.result || item.error || item.arguments),
+    };
+  }
+
+  if (type === "dynamicToolCall") {
+    return {
+      kind: "tool",
+      id,
+      title: String(item.tool || "Dynamic tool"),
+      output: stringifyDetail(item.contentItems || item.arguments),
+    };
+  }
+
+  if (type === "collabAgentToolCall") {
+    return {
+      kind: "tool",
+      id,
+      title: `Collab ${String(item.tool || "agent")}`,
+      output: stringifyDetail(item.prompt || item.agentsStates || item.receiverThreadIds),
+    };
+  }
+
+  if (type === "webSearch") {
+    return {
+      kind: "tool",
+      id,
+      title: "Web search",
+      output: String(item.query || ""),
+    };
+  }
+
+  if (type === "imageGeneration") {
+    return {
+      kind: "tool",
+      id,
+      title: "Image generation",
+      output: stringifyDetail(item.result || item.savedPath),
     };
   }
 
@@ -455,7 +810,7 @@ export function normalizeTurnSnapshot(turn: Record<string, unknown>): TurnSnapsh
   return {
     id: String(turn.id || ""),
     status: String(turn.status || "idle"),
-    error: turn.error ? String(turn.error) : null,
+    error: turn.error ? stringifyDetail(turn.error) : null,
     items: items.map((item) => normalizeTimelineItem(item as Record<string, unknown>)),
   };
 }
@@ -465,16 +820,34 @@ export function normalizeThreadSummary(thread: Record<string, unknown>): ThreadS
     thread.status && typeof thread.status === "object" && "type" in thread.status
       ? String((thread.status as { type?: unknown }).type || "idle")
       : String(thread.status || "idle");
+  const gitInfo =
+    thread.gitInfo && typeof thread.gitInfo === "object" && !Array.isArray(thread.gitInfo)
+      ? (thread.gitInfo as Record<string, unknown>)
+      : null;
 
   return {
     id: String(thread.id || ""),
     preview: String(thread.preview || ""),
     name: thread.name ? String(thread.name) : null,
     cwd: thread.cwd ? String(thread.cwd) : null,
+    path: thread.path ? String(thread.path) : null,
     updatedAt: Number(thread.updatedAt || 0),
     createdAt: Number(thread.createdAt || 0),
     status,
     source: thread.source ? String(thread.source) : null,
+    model: thread.model ? String(thread.model) : null,
+    modelProvider: thread.modelProvider ? String(thread.modelProvider) : null,
+    agentNickname: thread.agentNickname ? String(thread.agentNickname) : null,
+    agentRole: thread.agentRole ? String(thread.agentRole) : null,
+    parentThreadId: thread.parentThreadId ? String(thread.parentThreadId) : null,
+    forkedFromThreadId: thread.forkedFromThreadId ? String(thread.forkedFromThreadId) : null,
+    gitInfo: gitInfo
+      ? {
+          branch: readString(gitInfo.branch),
+          sha: readString(gitInfo.sha),
+          originUrl: readString(gitInfo.originUrl),
+        }
+      : null,
   };
 }
 
@@ -484,6 +857,27 @@ export function normalizeThreadSnapshot(thread: Record<string, unknown>): Thread
   return {
     ...normalizeThreadSummary(thread),
     turns: turns.map((turn) => normalizeTurnSnapshot(turn as Record<string, unknown>)),
+  };
+}
+
+export function getRelayEventTarget(event: CodexRelayEvent): RelayEventTarget {
+  if (event.kind === "log") {
+    return {
+      threadId: null,
+      turnId: null,
+      itemId: null,
+    };
+  }
+
+  const params = event.notification.params || {};
+  const thread = params.thread && typeof params.thread === "object" ? (params.thread as { id?: unknown }) : null;
+  const turn = params.turn && typeof params.turn === "object" ? (params.turn as { id?: unknown; threadId?: unknown }) : null;
+  const item = params.item && typeof params.item === "object" ? (params.item as { id?: unknown }) : null;
+
+  return {
+    threadId: readString(params.threadId) || readString(turn?.threadId) || readString(thread?.id),
+    turnId: readString(params.turnId) || readString(turn?.id),
+    itemId: readString(params.itemId) || readString(item?.id),
   };
 }
 
@@ -497,25 +891,64 @@ export function normalizeRelayEventToTimelineItem(event: CodexRelayEvent): Timel
     };
   }
 
-  const params = event.notification.params || {};
+  const { method, params } = event.notification;
+  const target = getRelayEventTarget(event);
   const maybeItem = params.item;
+
   if (maybeItem && typeof maybeItem === "object" && !Array.isArray(maybeItem)) {
     return normalizeTimelineItem(maybeItem as Record<string, unknown>);
   }
 
-  if (event.notification.method === "item/delta" && typeof params.delta === "string") {
+  if (method === "item/agentMessage/delta" && typeof params.delta === "string") {
     return {
       kind: "assistant-message",
-      id: createRequestId("delta"),
+      id: target.itemId || createRequestId("delta"),
       text: params.delta,
       phase: "stream",
+    };
+  }
+
+  if (method === "item/plan/delta" && typeof params.delta === "string") {
+    return {
+      kind: "plan",
+      id: target.itemId || createRequestId("plan"),
+      text: params.delta,
+    };
+  }
+
+  if (method === "item/commandExecution/outputDelta" && typeof params.delta === "string") {
+    return {
+      kind: "command",
+      id: target.itemId || createRequestId("cmd"),
+      title: "Command",
+      output: params.delta,
+    };
+  }
+
+  if (method === "item/fileChange/outputDelta" && typeof params.delta === "string") {
+    return {
+      kind: "file-change",
+      id: target.itemId || createRequestId("patch"),
+      title: "File change",
+      output: params.delta,
+    };
+  }
+
+  if (
+    (method === "item/reasoning/summaryTextDelta" || method === "item/reasoning/textDelta") &&
+    typeof params.delta === "string"
+  ) {
+    return {
+      kind: "reasoning",
+      id: target.itemId || createRequestId("reasoning"),
+      text: params.delta,
     };
   }
 
   return {
     kind: "event",
     id: createRequestId("evt"),
-    label: event.notification.method,
+    label: method,
     detail: stringifyDetail(params),
   };
 }
