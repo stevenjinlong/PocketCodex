@@ -8,7 +8,7 @@ services:
       PORT: 8787
       POCKET_CODEX_WEB_ORIGIN: ${POCKET_CODEX_WEB_ORIGIN:-http://localhost:3000}
       POCKET_CODEX_STORAGE_BACKEND: ${POCKET_CODEX_STORAGE_BACKEND:-postgres}
-      DATABASE_URL: ${DATABASE_URL:-postgres://pocket_codex:pocket_codex@postgres:5432/pocket_codex}
+      DATABASE_URL: ${DATABASE_URL_DOCKER:-postgres://pocket_codex:pocket_codex@postgres:5432/pocket_codex}
     ports:
       - "8787:8787"
 
