@@ -1,23 +1,43 @@
 # Pocket Codex
 
-Pocket Codex is a web client for a local Codex runtime.
+> Run Codex from anywhere. Keep the runtime on your machine.
 
-It gives you a hosted browser UI, account system, device trust, host pairing, and encrypted relay sessions without moving your actual Codex workspace into the control plane. Threads, turns, files, and runtime context stay with the agent and local Codex environment. The gateway and database only store control-plane data.
+Pocket Codex turns a local Codex runtime into a remote-first product experience. Open a browser anywhere, sign in, pair a host, and keep talking to the Codex runtime that still lives next to your real repository, tools, and local environment.
 
-## Why this exists
+The browser app and gateway handle the control plane. The agent stays on the machine that already has your workspace. Postgres stores users, trusted devices, hosts, pairings, and encrypted session metadata, while the real thread content stays with the runtime.
 
-Pocket Codex is built for the common setup where:
+## Why Pocket Codex feels different
 
-- the browser UI should work from anywhere
-- the Codex runtime should stay on the machine that has your real repo and tools
-- the relay should be secure enough to route commands and results without duplicating conversation history into the product database
+Most remote AI coding products want the server to become the workspace owner. Pocket Codex takes the opposite approach:
 
-In practice that means:
+- your browser can be anywhere
+- your Codex runtime stays on the machine that already has the repo
+- your gateway stores the control plane, not the source of truth for the work
+- your pairing token can be claimed from any browser connected to the same gateway
+- your remote UX gets better without rebuilding Codex as a cloud IDE
 
-- `web` handles login, pairing, chat UI, and controls
-- `gateway` manages users, hosts, browsers, pairings, and secure session setup
+## Highlights
+
+- Hosted browser UI for a local Codex runtime
+- Secure browser-to-agent relay sessions routed through a gateway
+- QR code and token-based host pairing
+- Postgres-backed control plane by default
+- JSON fallback mode for lightweight local debugging
+- One gateway can serve multiple browsers and multiple remote agents
+
+## Great for
+
+- running the UI on a VPS while keeping repos on your laptop or workstation
+- accessing your Codex runtime from another machine without exposing the runtime directly
+- building a self-hosted remote control plane around Codex
+- separating product UX from execution environment
+
+## What runs where
+
+- `web` handles login, pairing, chat UI, and runtime controls
+- `gateway` manages users, trusted browsers, hosts, pairings, and secure session setup
 - `agent` runs next to the Codex CLI/runtime and executes the real work
-- Postgres stores only control-plane records
+- `postgres` stores control-plane records only
 
 ## What Pocket Codex stores
 
@@ -32,7 +52,7 @@ The database stores:
 
 It does not store Codex thread content as the source of truth.
 
-## Architecture
+## Architecture at a glance
 
 ```text
 Browser (web)
@@ -43,6 +63,8 @@ Gateway
 Agent on your machine
   -> Codex runtime / local workspace
 ```
+
+## How pairing and relay work
 
 Pairing and session flow:
 
