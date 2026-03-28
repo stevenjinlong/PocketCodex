@@ -38,6 +38,27 @@
   The browser app and gateway handle the control plane. The agent stays on the machine that already has your workspace. Postgres stores users, trusted devices, hosts, pairings, and encrypted session metadata, while the real thread content stays with the runtime.
 </p>
 
+## Product Preview
+
+<table>
+  <tr>
+    <td width="50%" valign="top">
+      <img src="./docs/assets/screenshots/dashboard-dark.png" alt="Pocket Codex dark workspace" />
+      <p><strong>Dark workspace shell</strong><br/>Grouped conversations, runtime controls, and an encrypted relay-ready chat surface.</p>
+    </td>
+    <td width="50%" valign="top">
+      <img src="./docs/assets/screenshots/dashboard-light.png" alt="Pocket Codex light workspace" />
+      <p><strong>Light workspace shell</strong><br/>A brighter layout option with the same host-aware empty state and control plane UX.</p>
+    </td>
+  </tr>
+  <tr>
+    <td colspan="2" valign="top">
+      <img src="./docs/assets/screenshots/auth-screen.png" alt="Pocket Codex authentication screen" />
+      <p><strong>Split auth experience</strong><br/>A landing-style sign-in and account creation flow with pairing-oriented product messaging.</p>
+    </td>
+  </tr>
+</table>
+
 ## Why Pocket Codex feels different
 
 Most remote AI coding products want the server to become the workspace owner. Pocket Codex takes the opposite approach:
