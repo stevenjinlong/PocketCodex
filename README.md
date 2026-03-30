@@ -32,6 +32,24 @@ The important design point is:
 
 Thread content is not stored in the product database as the source of truth. The database only stores control-plane data.
 
+## Screenshots
+
+<table>
+  <tr>
+    <td width="50%" valign="top">
+      <img src="./docs/assets/screenshots/dashboard-dark.png" alt="Pocket Codex dark workspace" />
+    </td>
+    <td width="50%" valign="top">
+      <img src="./docs/assets/screenshots/dashboard-light.png" alt="Pocket Codex light workspace" />
+    </td>
+  </tr>
+  <tr>
+    <td colspan="2" valign="top">
+      <img src="./docs/assets/screenshots/auth-screen.png" alt="Pocket Codex authentication screen" />
+    </td>
+  </tr>
+</table>
+
 ## Architecture
 
 ```text
@@ -459,24 +477,6 @@ It includes:
 - `displayName`
 
 Do not commit or share it casually.
-
-## Screenshots
-
-<table>
-  <tr>
-    <td width="50%" valign="top">
-      <img src="./docs/assets/screenshots/dashboard-dark.png" alt="Pocket Codex dark workspace" />
-    </td>
-    <td width="50%" valign="top">
-      <img src="./docs/assets/screenshots/dashboard-light.png" alt="Pocket Codex light workspace" />
-    </td>
-  </tr>
-  <tr>
-    <td colspan="2" valign="top">
-      <img src="./docs/assets/screenshots/auth-screen.png" alt="Pocket Codex authentication screen" />
-    </td>
-  </tr>
-</table>
 
 ## License
 
