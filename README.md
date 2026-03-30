@@ -14,6 +14,10 @@
   </a>
 </p>
 
+<p align="center">
+  English | <a href="./README.zh-CN.md">简体中文</a>
+</p>
+
 # Pocket Codex
 
 Pocket Codex is a web UI and control plane for a local Codex runtime.
