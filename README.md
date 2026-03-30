@@ -12,186 +12,111 @@
   <a href="https://github.com/stevenjinlong/PocketCodex/issues">
     <img alt="GitHub issues" src="https://img.shields.io/github/issues/stevenjinlong/PocketCodex?style=for-the-badge&logo=github&label=Issues&color=0F766E" />
   </a>
-  <a href="https://github.com/stevenjinlong/PocketCodex/commits/main">
-    <img alt="GitHub last commit" src="https://img.shields.io/github/last-commit/stevenjinlong/PocketCodex?style=for-the-badge&logo=github&label=Last%20Commit&color=F59E0B" />
-  </a>
 </p>
 
-<p align="center">
-  <img alt="Next.js 15" src="https://img.shields.io/badge/Next.js-15-111827?style=flat-square&logo=nextdotjs&logoColor=white" />
-  <img alt="Postgres control plane" src="https://img.shields.io/badge/Postgres-Control%20Plane-336791?style=flat-square&logo=postgresql&logoColor=white" />
-  <img alt="Encrypted relay" src="https://img.shields.io/badge/Encrypted-Relay-0EA5E9?style=flat-square" />
-  <img alt="Self-hosted" src="https://img.shields.io/badge/Self--Hosted-Ready-2563EB?style=flat-square" />
-</p>
+# Pocket Codex
 
-<h1 align="center">Pocket Codex</h1>
+Pocket Codex is a web UI and control plane for a local Codex runtime.
 
-<p align="center">
-  <strong>Run Codex from anywhere. Keep the runtime on your machine.</strong>
-</p>
+The project is split into four parts:
 
-<p align="center">
-  Pocket Codex turns a local Codex runtime into a remote-first product experience. Open a browser anywhere, sign in, pair a host, and keep talking to the Codex runtime that still lives next to your real repository, tools, and local environment.
-</p>
+- `web`: browser UI
+- `gateway`: HTTP + WebSocket control-plane service
+- `agent`: local daemon that talks to Codex and your local workspace
+- `postgres`: database for users, hosts, browser devices, pairings, and relay session metadata
 
-<p align="center">
-  The browser app and gateway handle the control plane. The agent stays on the machine that already has your workspace. Postgres stores users, trusted devices, hosts, pairings, and encrypted session metadata, while the real thread content stays with the runtime.
-</p>
+The important design point is:
 
-## Product Preview
+- `web + gateway + postgres` can run on a server
+- `agent` should run on the machine that has the real repository and Codex runtime
 
-<table>
-  <tr>
-    <td width="50%" valign="top">
-      <img src="./docs/assets/screenshots/dashboard-dark.png" alt="Pocket Codex dark workspace" />
-      <p><strong>Dark workspace shell</strong><br/>Grouped conversations, runtime controls, and an encrypted relay-ready chat surface.</p>
-    </td>
-    <td width="50%" valign="top">
-      <img src="./docs/assets/screenshots/dashboard-light.png" alt="Pocket Codex light workspace" />
-      <p><strong>Light workspace shell</strong><br/>A brighter layout option with the same host-aware empty state and control plane UX.</p>
-    </td>
-  </tr>
-  <tr>
-    <td colspan="2" valign="top">
-      <img src="./docs/assets/screenshots/auth-screen.png" alt="Pocket Codex authentication screen" />
-      <p><strong>Split auth experience</strong><br/>A landing-style sign-in and account creation flow with pairing-oriented product messaging.</p>
-    </td>
-  </tr>
-</table>
+Thread content is not stored in the product database as the source of truth. The database only stores control-plane data.
 
-## Why Pocket Codex feels different
-
-Most remote AI coding products want the server to become the workspace owner. Pocket Codex takes the opposite approach:
-
-- your browser can be anywhere
-- your Codex runtime stays on the machine that already has the repo
-- your gateway stores the control plane, not the source of truth for the work
-- your pairing token can be claimed from any browser connected to the same gateway
-- your remote UX gets better without rebuilding Codex as a cloud IDE
-
-## Highlights
-
-- Hosted browser UI for a local Codex runtime
-- Secure browser-to-agent relay sessions routed through a gateway
-- QR code and token-based host pairing
-- Postgres-backed control plane by default
-- JSON fallback mode for lightweight local debugging
-- One gateway can serve multiple browsers and multiple remote agents
-
-## Great for
-
-- running the UI on a VPS while keeping repos on your laptop or workstation
-- accessing your Codex runtime from another machine without exposing the runtime directly
-- building a self-hosted remote control plane around Codex
-- separating product UX from execution environment
-
-## What runs where
-
-- `web` handles login, pairing, chat UI, and runtime controls
-- `gateway` manages users, trusted browsers, hosts, pairings, and secure session setup
-- `agent` runs next to the Codex CLI/runtime and executes the real work
-- `postgres` stores control-plane records only
-
-## What Pocket Codex stores
-
-The database stores:
-
-- users
-- trusted browser devices
-- registered hosts
-- pairing tokens
-- encrypted relay session metadata
-- gateway server secret
-
-It does not store Codex thread content as the source of truth.
-
-## Architecture at a glance
+## Architecture
 
 ```text
-Browser (web)
-  -> HTTP + WebSocket
-Gateway
-  -> Postgres (control plane only)
-  -> WebSocket
-Agent on your machine
-  -> Codex runtime / local workspace
+Browser
+  -> web
+  -> gateway (HTTP + WebSocket)
+  -> postgres
+
+Agent on a real machine
+  -> gateway (WebSocket)
+  -> local Codex runtime
+  -> local filesystem / git / shell
 ```
 
-## How pairing and relay work
+## What each service does
 
-Pairing and session flow:
+### `web`
 
-1. The agent connects to the gateway and registers its `hostId` and `hostSecret`.
-2. The agent asks the gateway to create a short-lived pairing token.
-3. The browser signs into the same gateway and claims that pairing token.
-4. The gateway links the host to the user account.
-5. Browser and agent establish encrypted relay sessions through the gateway.
+- user login
+- pairing UI
+- chat UI
+- runtime controls
 
-The important boundary is the gateway, not the frontend. A pairing token generated by an agent can be claimed from any browser that is connected to the same gateway and database.
+### `gateway`
 
-## Monorepo layout
+- authentication
+- browser/device trust
+- host registration
+- pairing token creation and claiming
+- browser/agent WebSocket relay
+- secure session setup
 
-`pocket-codex` is an npm workspace monorepo:
+### `agent`
 
-- `apps/web`: Next.js browser client
-- `apps/gateway`: Express + WebSocket gateway
-- `apps/agent`: local Node daemon that talks to the Codex runtime
-- `packages/protocol`: shared message types and normalization helpers
-- `packages/crypto`: session key and relay encryption helpers
-- `packages/db`: Drizzle schema and database helpers
+- connects a machine to the gateway
+- talks to the local Codex runtime
+- reads threads and turns
+- executes commands against the local workspace
 
-## Current storage modes
+### `postgres`
 
-Pocket Codex supports two gateway storage backends:
+Stores:
 
-- `postgres`
-  Default and recommended. This is the main control-plane mode now.
-- `json`
-  Legacy fallback for quick local debugging without a database.
-
-Backend resolution order:
-
-1. `POCKET_CODEX_STORAGE_BACKEND=json|postgres`
-2. If unset, the gateway defaults to `postgres`
-3. For host-native processes the gateway uses `DATABASE_URL`
-4. For Docker Compose the gateway uses `DATABASE_URL_DOCKER`
+- users
+- browser devices
+- hosts
+- pairing tokens
+- relay sessions
+- gateway config
 
 ## Requirements
 
 - Node.js 22+
 - npm 10+
-- Docker Desktop or Docker Engine for the bundled Postgres / stack workflow
-- a working `codex` CLI/runtime on the machine that will run the agent
+- Docker / Docker Compose for the default database-backed setup
+- a working `codex` CLI/runtime on any machine that will run `agent`
+
+## Default mode
+
+The default gateway backend is `postgres`.
+
+JSON mode still exists as a fallback for local debugging, but for normal use and deployment you should use DB mode.
 
 ## Quick start
 
-### Option A: full local stack with Docker
+### Option A: easiest local run
 
-This is the easiest way to get the browser UI, gateway, and Postgres running together.
+Run `web + gateway + postgres` on the current machine, then run `agent` on the same machine.
 
 ```sh
 npm install
 cp .env.example .env
 npm run stack:up
-```
-
-This starts:
-
-- `web` on `http://localhost:3000`
-- `gateway` on `http://localhost:8787`
-- `postgres` on `localhost:5432`
-
-Then start the agent on the host machine:
-
-```sh
 npm run start --workspace @pocket-codex/agent -- --pair
 ```
 
-The agent stays outside Docker because it needs access to your local Codex installation, local filesystem, and real repositories.
+This gives you:
 
-### Option B: Postgres in Docker, apps on the host
+- web: `http://localhost:3000`
+- gateway: `http://localhost:8787`
+- postgres: `localhost:5432`
 
-This is a good development setup if you want hot reload for the web and gateway apps.
+### Option B: database in Docker, apps on the host
+
+Useful when you want hot reload for `web` and `gateway`.
 
 ```sh
 npm install
@@ -204,7 +129,7 @@ npm run start --workspace @pocket-codex/agent -- --pair
 
 ### Option C: legacy JSON mode
 
-If you want to bypass Postgres entirely:
+If you explicitly want to avoid Postgres:
 
 ```env
 POCKET_CODEX_STORAGE_BACKEND=json
@@ -212,7 +137,7 @@ DATABASE_URL=
 DATABASE_URL_DOCKER=
 ```
 
-Then either:
+Then use either:
 
 ```sh
 npm run dev:gateway:json
@@ -224,22 +149,51 @@ or:
 npm run stack:up:json
 ```
 
-## Remote deployment pattern
+## Main commands
 
-The intended multi-machine setup is:
-
-- deploy `web + gateway + postgres` on one server
-- point every browser at that web app
-- point every remote agent at that same gateway
-
-Example agent startup against a remote gateway:
+### Workspace-wide
 
 ```sh
-POCKET_CODEX_GATEWAY_WS_URL=wss://your-domain.example/ws/agent \
-npm run start --workspace @pocket-codex/agent -- --pair
+npm install
+npm run build
+npm run typecheck
 ```
 
-As long as the browser and the agent talk to the same gateway, the pairing token will work.
+### Docker stack
+
+```sh
+npm run stack:up
+npm run stack:up:postgres
+npm run stack:up:json
+npm run stack:down
+npm run stack:logs
+```
+
+### Database only
+
+```sh
+npm run db:up
+npm run db:down
+npm run db:logs
+npm run db:reset
+```
+
+### Host-native development
+
+```sh
+npm run dev:web
+npm run dev:gateway
+npm run dev:gateway:json
+npm run dev:agent
+```
+
+### Workspace-scoped examples
+
+```sh
+npm run build --workspace @pocket-codex/gateway
+npm run typecheck --workspace @pocket-codex/web
+npm run start --workspace @pocket-codex/agent -- --pair
+```
 
 ## Pairing a host
 
@@ -249,96 +203,83 @@ Start the agent with `--pair`:
 npm run start --workspace @pocket-codex/agent -- --pair
 ```
 
-That prints:
+The agent will print:
 
 - a QR code
-- the raw pairing payload JSON
+- a raw pairing payload JSON blob
 - a short-lived `pair_...` token
 
 Then in the browser:
 
-1. Sign in or create an account.
-2. Open the pairing/setup panel.
+1. Sign in.
+2. Open the setup/pairing panel.
 3. Paste the pairing payload or token.
-4. Bind the host to your account.
+4. Bind the host.
 
 Pairing tokens are:
 
 - tied to a host
 - valid for 10 minutes
 - single-use
-- claimed through the gateway, not the frontend alone
+- claimed through the gateway
 
-## Development commands
+## Recommended deployment model
 
-Workspace-wide:
+If someone wants to deploy this as a website for real use, the recommended split is:
+
+### Server
+
+Run these on one server:
+
+- `web`
+- `gateway`
+- `postgres`
+- optional reverse proxy like `nginx` or `caddy`
+
+### User machine
+
+Run this on each real user machine:
+
+- `agent`
+
+That means:
+
+- the website is shared
+- the gateway is shared
+- the database is shared
+- each user still keeps execution on their own machine
+
+## Deploy `web + gateway + postgres` on one server
+
+Recommended DNS layout:
+
+- `app.example.com` -> `web`
+- `gateway.example.com` -> `gateway`
+
+Example `.env`:
+
+```env
+NEXT_PUBLIC_GATEWAY_HTTP_URL=https://gateway.example.com
+NEXT_PUBLIC_GATEWAY_WS_URL=wss://gateway.example.com/ws/browser
+POCKET_CODEX_WEB_ORIGIN=https://app.example.com
+
+POCKET_CODEX_STORAGE_BACKEND=postgres
+
+DATABASE_URL=postgres://pocket_codex:YOUR_PASSWORD@localhost:5432/pocket_codex
+DATABASE_URL_DOCKER=postgres://pocket_codex:YOUR_PASSWORD@postgres:5432/pocket_codex
+
+POSTGRES_DB=pocket_codex
+POSTGRES_USER=pocket_codex
+POSTGRES_PASSWORD=YOUR_PASSWORD
+POSTGRES_PORT=5432
+```
+
+Start the server side:
 
 ```sh
 npm install
-npm run build
-npm run typecheck
+docker compose up -d --build
 ```
-
-Top-level convenience scripts:
-
-```sh
-npm run stack:up
-npm run stack:up:postgres
-npm run stack:up:json
-npm run stack:down
-npm run stack:logs
-
-npm run db:up
-npm run db:down
-npm run db:logs
-npm run db:reset
-
-npm run dev:web
-npm run dev:gateway
-npm run dev:gateway:json
-npm run dev:agent
-```
-
-Workspace-scoped examples:
-
-```sh
-npm run build --workspace @pocket-codex/gateway
-npm run typecheck --workspace @pocket-codex/web
-npm run start --workspace @pocket-codex/agent -- --pair
-```
-
-## Environment variables
-
-See [.env.example](./.env.example) for the full set.
-
-The most important values are:
-
-| Variable | Used by | Purpose |
-| --- | --- | --- |
-| `NEXT_PUBLIC_GATEWAY_HTTP_URL` | web | Browser HTTP base URL for the gateway |
-| `NEXT_PUBLIC_GATEWAY_WS_URL` | web | Browser WebSocket URL for the gateway |
-| `POCKET_CODEX_WEB_ORIGIN` | gateway | Allowed browser origin |
-| `POCKET_CODEX_STORAGE_BACKEND` | gateway | `postgres` or `json` |
-| `DATABASE_URL` | host-native gateway | Postgres URL for `npm run dev:gateway` |
-| `DATABASE_URL_DOCKER` | Docker gateway | Postgres URL inside Compose networking |
-| `POCKET_CODEX_GATEWAY_WS_URL` | agent | Agent WebSocket URL for the gateway |
-| `POSTGRES_DB` / `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_PORT` | postgres | Local DB container settings |
-
-## Docker notes
-
-The Compose setup uses a different Postgres hostname than host-native development:
-
-- host-native gateway should use `localhost:5432`
-- Dockerized gateway should use `postgres:5432`
-
-That is why this repo has both:
-
-- `DATABASE_URL`
-- `DATABASE_URL_DOCKER`
-
-If the gateway tries to connect to `localhost:5432` from inside Docker, it will fail because `localhost` would mean the gateway container itself, not the Postgres container.
-
-## Health and verification
 
 Health check:
 
@@ -346,28 +287,172 @@ Health check:
 curl http://localhost:8787/health
 ```
 
-Minimum verification:
+## Run `agent` on another machine
+
+On the remote machine:
+
+```sh
+git clone <your-fork-or-repo>
+cd PocketCodex
+npm install
+
+POCKET_CODEX_GATEWAY_WS_URL=wss://gateway.example.com/ws/agent \
+npm run start --workspace @pocket-codex/agent -- --pair
+```
+
+The agent WebSocket endpoint is:
+
+- browser: `/ws/browser`
+- agent: `/ws/agent`
+
+So the agent should connect to something like:
+
+```text
+wss://gateway.example.com/ws/agent
+```
+
+As long as the browser and the agent talk to the same gateway, the pairing token will work.
+
+## Example: host machine + VM simulation
+
+If you want to simulate this locally:
+
+### On the host machine
+
+Run:
+
+```sh
+npm install
+cp .env.example .env
+npm run stack:up
+```
+
+### On the VM
+
+Use the host machine IP instead of `localhost`:
+
+```sh
+POCKET_CODEX_GATEWAY_WS_URL=ws://HOST_IP:8787/ws/agent \
+npm run start --workspace @pocket-codex/agent -- --pair
+```
+
+Important:
+
+- `localhost` inside the VM means the VM itself
+- the VM must connect to the host machine IP, not `localhost`
+
+## Environment variables
+
+See [.env.example](./.env.example) for the full set.
+
+Most important values:
+
+| Variable | Used by | Purpose |
+| --- | --- | --- |
+| `NEXT_PUBLIC_GATEWAY_HTTP_URL` | web | Browser HTTP base URL |
+| `NEXT_PUBLIC_GATEWAY_WS_URL` | web | Browser WebSocket URL |
+| `POCKET_CODEX_WEB_ORIGIN` | gateway | Allowed browser origin |
+| `POCKET_CODEX_STORAGE_BACKEND` | gateway | `postgres` or `json` |
+| `DATABASE_URL` | host-native gateway | Postgres URL for local process mode |
+| `DATABASE_URL_DOCKER` | Docker gateway | Postgres URL inside Compose |
+| `POCKET_CODEX_GATEWAY_WS_URL` | agent | Agent WebSocket URL |
+| `POSTGRES_DB` / `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_PORT` | postgres | Database settings |
+
+## Why there are two database URLs
+
+This is expected:
+
+```env
+DATABASE_URL=postgres://pocket_codex:pocket_codex@localhost:5432/pocket_codex
+DATABASE_URL_DOCKER=postgres://pocket_codex:pocket_codex@postgres:5432/pocket_codex
+```
+
+Reason:
+
+- `DATABASE_URL` is for processes running directly on the host
+- `DATABASE_URL_DOCKER` is for the `gateway` container inside Docker Compose
+
+Inside Compose, `postgres` is the service hostname. Using `localhost` from inside the `gateway` container would point back to the container itself, not the database container.
+
+## Storage modes
+
+### `postgres`
+
+- default
+- recommended
+- required for serious deployment
+
+### `json`
+
+- local fallback only
+- useful for debugging
+- not recommended for a real multi-user deployment
+
+## Verification
+
+Build and typecheck:
 
 ```sh
 npm run typecheck
 npm run build
 ```
 
-Useful database check:
+Gateway health:
+
+```sh
+curl http://localhost:8787/health
+```
+
+Database tables:
 
 ```sh
 docker exec pocketcodex-postgres-1 psql -U pocket_codex -d pocket_codex -c '\dt'
 ```
 
-## Local state
+## Troubleshooting
 
-The local agent identity is stored at:
+### `localhost:3000` still shows an old UI
+
+You are probably looking at an older Docker container or an older local dev process.
+
+Try:
+
+- rebuild the `web` container
+- or stop the container and run `npm run dev:web`
+
+### Gateway cannot connect to Postgres inside Docker
+
+Use `DATABASE_URL_DOCKER=postgres://...@postgres:5432/...`.
+
+Do not use `localhost` inside the `gateway` container.
+
+### Pairing token does not work
+
+Check:
+
+- the token is not expired
+- the token was generated by an agent connected to the same gateway
+- the browser is logged into the same deployment
+- the host is not already paired to another account
+
+### Agent on another machine cannot connect
+
+Check:
+
+- firewall rules
+- correct gateway host/IP
+- `POCKET_CODEX_GATEWAY_WS_URL`
+- whether `8787` is actually reachable from that machine
+
+## Local agent state
+
+The agent identity is stored at:
 
 ```text
 ~/.pocket-codex/agent.json
 ```
 
-That file includes:
+It includes:
 
 - `hostId`
 - `hostSecret`
@@ -375,52 +460,24 @@ That file includes:
 
 Do not commit or share it casually.
 
-## Troubleshooting
+## Screenshots
 
-### The browser UI changed in source but `localhost:3000` still looks old
-
-You are probably still looking at a previously built Docker container. Either:
-
-- rebuild the `web` container
-- or stop the container and run `npm run dev:web`
-
-### The gateway says Postgres connection failed inside Docker
-
-Use `DATABASE_URL_DOCKER=postgres://...@postgres:5432/...`, not `localhost`.
-
-### The agent connects but pairing does not appear in the browser
-
-Check that:
-
-- the browser is signed into the same gateway the agent uses
-- the agent is started with the correct `POCKET_CODEX_GATEWAY_WS_URL`
-- the token has not expired
-- the host is not already paired to another account
-
-### The host is already paired
-
-Pairing is account-bound. A host that is already paired cannot be claimed by another user until the underlying host record is reset or recreated.
-
-## Security model
-
-Pocket Codex is designed so that:
-
-- control-plane state lives in the gateway and database
-- Codex thread content remains with the runtime
-- secure relay sessions derive keys between browser and agent
-- the gateway routes encrypted traffic but is not the source of truth for the actual workspace
-
-This is not a full zero-trust product claim, but it is intentionally narrower than copying all runtime data into the server-side product database.
-
-## Status
-
-Current state of the project:
-
-- web UI, pairing flow, and secure relay plumbing are implemented
-- Postgres is now the default control-plane backend
-- JSON mode is still available as a fallback
-- there is not yet a committed automated test suite beyond build and typecheck
+<table>
+  <tr>
+    <td width="50%" valign="top">
+      <img src="./docs/assets/screenshots/dashboard-dark.png" alt="Pocket Codex dark workspace" />
+    </td>
+    <td width="50%" valign="top">
+      <img src="./docs/assets/screenshots/dashboard-light.png" alt="Pocket Codex light workspace" />
+    </td>
+  </tr>
+  <tr>
+    <td colspan="2" valign="top">
+      <img src="./docs/assets/screenshots/auth-screen.png" alt="Pocket Codex authentication screen" />
+    </td>
+  </tr>
+</table>
 
 ## License
 
-No license file is included in this repository yet. Add one before treating the repo as open-source production-ready.
+No license file is included yet.

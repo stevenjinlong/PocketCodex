@@ -54,6 +54,7 @@ import {
 import {
   ChatInput,
   EmptyConversation,
+  LiveTurnIndicator,
   MessageBubble,
 } from "./pocket-codex-chat";
 import { Icons } from "./pocket-codex-icons";
@@ -646,6 +647,38 @@ function getActiveTurn(snapshot: ThreadSnapshot | null): TurnSnapshot | null {
   return null;
 }
 
+function getPendingTurnIndicatorMode(turn: TurnSnapshot | null): "thinking" | "tools" | "running" | null {
+  if (!turn) {
+    return null;
+  }
+
+  if (turn.items.some((item) => item.kind === "assistant-message" && item.text.trim())) {
+    return null;
+  }
+
+  if (turn.items.some((item) => item.kind === "plan" && item.text.trim())) {
+    return null;
+  }
+
+  if (turn.items.some((item) => item.kind === "reasoning" && item.text.trim())) {
+    return null;
+  }
+
+  if (turn.items.some((item) => item.kind === "command" || item.kind === "file-change")) {
+    return null;
+  }
+
+  if (turn.items.some((item) => item.kind === "reasoning")) {
+    return "thinking";
+  }
+
+  if (turn.items.some((item) => item.kind === "tool")) {
+    return "tools";
+  }
+
+  return "running";
+}
+
 function hostStatusLabel(host: HostSummary | null): string {
   if (!host) {
     return "No host";
@@ -826,6 +859,7 @@ export function PocketCodexApp() {
   );
 
   const activeTurn = useMemo(() => getActiveTurn(selectedThread), [selectedThread]);
+  const pendingTurnIndicatorMode = useMemo(() => getPendingTurnIndicatorMode(activeTurn), [activeTurn]);
 
   const pairingPreview = useMemo(() => parsePairingQrPayload(pairingInput.trim()), [pairingInput]);
 
@@ -837,9 +871,14 @@ export function PocketCodexApp() {
     const items: TimelineItem[] = [];
     for (const turn of selectedThread.turns) {
       for (const item of turn.items) {
+        if (item.kind === "tool") {
+          continue;
+        }
+
         if (item.kind === "reasoning" && !item.text.trim()) {
           continue;
         }
+
         items.push(item);
       }
       if (turn.error) {
@@ -1966,7 +2005,7 @@ export function PocketCodexApp() {
       return;
     }
     timelineRef.current.scrollTop = timelineRef.current.scrollHeight;
-  }, [flattenedTimeline]);
+  }, [flattenedTimeline, pendingTurnIndicatorMode]);
 
   useEffect(() => {
     setThreads([]);
@@ -2650,12 +2689,21 @@ export function PocketCodexApp() {
                 }
               />
             ) : flattenedTimeline.length === 0 ? (
-              <EmptyConversation
-                title="Start a new conversation"
-                body="Ask Codex to inspect files, edit code, run commands, or continue your current work."
-              />
+              pendingTurnIndicatorMode ? (
+                <LiveTurnIndicator mode={pendingTurnIndicatorMode} />
+              ) : (
+                <EmptyConversation
+                  title="Start a new conversation"
+                  body="Ask Codex to inspect files, edit code, run commands, or continue your current work."
+                />
+              )
             ) : (
-              flattenedTimeline.map((item) => <MessageBubble key={item.id} item={item} />)
+              <>
+                {flattenedTimeline.map((item) => <MessageBubble key={item.id} item={item} />)}
+                {pendingTurnIndicatorMode && activeTurn ? (
+                  <LiveTurnIndicator mode={pendingTurnIndicatorMode} key={`${activeTurn.id}_live`} />
+                ) : null}
+              </>
             )}
           </div>
         }

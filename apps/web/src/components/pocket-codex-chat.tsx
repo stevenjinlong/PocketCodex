@@ -10,8 +10,10 @@ import type {
   TimelineItem,
 } from "@pocket-codex/protocol";
 import type { ChangeEvent, FormEvent, KeyboardEvent, ReactNode, ReactElement, RefObject } from "react";
+import rehypeKatex from "rehype-katex";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import remarkMath from "remark-math";
 
 import { Icons } from "./pocket-codex-icons";
 import { ActionButton } from "./pocket-codex-ui";
@@ -142,11 +144,25 @@ function readBlockCode(element: ReactNode): { content: string; language: string 
   };
 }
 
+function normalizeMathMarkdown(markdown: string): string {
+  return markdown
+    .replace(/\\{1,2}\[((?:.|\n)+?)\\{1,2}\]/g, (_match: string, content: string) => `\n$$\n${content}\n$$\n`)
+    .replace(
+      /(^|\n)\s*\\?\[\s*([^\n]*\\[A-Za-z][^\n]*)\s*\\?\]\s*(?=\n|$)/g,
+      (_match: string, prefix: string, content: string) => `${prefix}$$\n${content}\n$$`,
+    )
+    .replace(/\\{1,2}\((.+?)\\{1,2}\)/g, (_match: string, content: string) => `$${content}$`)
+    .replace(/\\{1,2}\(([^()\n]+?)\)/g, (_match: string, content: string) => `$${content}$`);
+}
+
 function MarkdownBlock({ markdown }: { markdown: string }) {
+  const normalizedMarkdown = normalizeMathMarkdown(markdown);
+
   return (
     <div className="pc-markdown">
       <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
+        remarkPlugins={[remarkGfm, remarkMath]}
+        rehypePlugins={[rehypeKatex]}
         components={{
           pre(props) {
             const { children } = props;
@@ -182,7 +198,7 @@ function MarkdownBlock({ markdown }: { markdown: string }) {
           },
         }}
       >
-        {markdown}
+        {normalizedMarkdown}
       </ReactMarkdown>
     </div>
   );
@@ -293,14 +309,70 @@ export function FileChangeCard({
 }
 
 export function ThinkingBlock({ text }: { text: string }) {
+  const isLive = !text.trim();
+
   return (
-    <div className="pc-thinking-block">
+    <div className={`pc-thinking-block${isLive ? " is-live" : ""}`}>
       <div className="pc-thinking-pill">
         <span className="pc-thinking-dot" />
         <Icons.Brain />
         <span>Thinking</span>
+        {isLive ? (
+          <span className="pc-thinking-dots" aria-hidden="true">
+            <span />
+            <span />
+            <span />
+          </span>
+        ) : null}
       </div>
-      {text ? <p>{text}</p> : null}
+      {isLive ? <p className="pc-thinking-placeholder">Codex is reasoning about your request.</p> : <p>{text}</p>}
+    </div>
+  );
+}
+
+export function LiveTurnIndicator({
+  mode,
+}: {
+  mode: "thinking" | "tools" | "running";
+}) {
+  const icon =
+    mode === "thinking"
+      ? <Icons.Brain />
+      : mode === "tools"
+        ? <Icons.Search />
+        : <Icons.Bolt />;
+
+  const label =
+    mode === "thinking"
+      ? "Thinking"
+      : mode === "tools"
+        ? "Using tools"
+        : "Running";
+
+  const body =
+    mode === "thinking"
+      ? "Codex is reasoning about your request."
+      : mode === "tools"
+        ? "Codex is gathering context and running tools."
+        : "Codex has started working on your request.";
+
+  return (
+    <div className="pc-message-row is-assistant pc-live-turn-row">
+      <div className="pc-message-avatar is-muted">
+        {icon}
+      </div>
+      <div className="pc-message-stack">
+        <div className={`pc-live-turn-pill is-${mode}`}>
+          {icon}
+          <span>{label}</span>
+          <span className="pc-live-turn-dots" aria-hidden="true">
+            <span />
+            <span />
+            <span />
+          </span>
+        </div>
+        <p className="pc-live-turn-copy">{body}</p>
+      </div>
     </div>
   );
 }
