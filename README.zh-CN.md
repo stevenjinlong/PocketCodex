@@ -490,3 +490,7 @@ agent 身份信息保存在：
 ## License
 
 仓库目前还没有附带 license 文件。
+
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=stevenjinlong/PocketCodex&type=Date)](https://www.star-history.com/#stevenjinlong/PocketCodex&Date)

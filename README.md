@@ -485,3 +485,7 @@ Do not commit or share it casually.
 ## License
 
 No license file is included yet.
+
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=stevenjinlong/PocketCodex&type=Date)](https://www.star-history.com/#stevenjinlong/PocketCodex&Date)
